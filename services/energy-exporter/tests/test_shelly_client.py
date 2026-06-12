@@ -1,4 +1,4 @@
-from src.shelly_client import parse_switch_status
+from src.drivers.shelly import parse_switch_status
 
 SAMPLE = {
     "id": 0, "output": True, "apower": 1234.5, "voltage": 230.1,
