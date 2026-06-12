@@ -1,0 +1,28 @@
+# CI: run every service's test suite via its Dockerfile test stage.
+# The test stage IS the single source of truth for "tests green" — identical
+# locally (docker build --target test services/<name>) and here.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [energy-exporter, surplus-controller, vicare-exporter, control-ui]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Run test stage
+        uses: docker/build-push-action@v6
+        with:
+          context: services/${{ matrix.service }}
+          target: test
+          push: false
+          cache-from: type=gha,scope=test-${{ matrix.service }}
+          cache-to: type=gha,scope=test-${{ matrix.service }},mode=max
