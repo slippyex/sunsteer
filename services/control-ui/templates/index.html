@@ -1,0 +1,617 @@
+<!doctype html>
+<html lang="{{ lang }}" class="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ t('app_title') }}</title>
+
+  {# ── CDN dependencies (keep intact per wiring contract) ───────── #}
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+
+  {# ── Google Fonts: JetBrains Mono (data) + DM Sans (UI) ────────── #}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+
+  <script>
+    /* Tailwind dark-mode + custom config */
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['DM Sans', 'ui-sans-serif', 'system-ui'],
+            mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
+          },
+        },
+      },
+    };
+  </script>
+
+  <style>
+    /* Subtle dot-grid background texture */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: radial-gradient(circle, rgba(148,163,184,0.06) 1px, transparent 1px);
+      background-size: 28px 28px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Page-level fade-in on load */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .fade-up {
+      animation: fadeUp 0.4s ease both;
+    }
+    .fade-up-1 { animation-delay: 0.05s; }
+    .fade-up-2 { animation-delay: 0.12s; }
+    .fade-up-3 { animation-delay: 0.19s; }
+    .fade-up-4 { animation-delay: 0.26s; }
+    .fade-up-5 { animation-delay: 0.33s; }
+
+    /* HTMX in-flight opacity pulse */
+    .htmx-request { opacity: 0.6; transition: opacity 0.2s; }
+
+    /* Details/summary arrow tweak */
+    details > summary { list-style: none; }
+    details > summary::-webkit-details-marker { display: none; }
+    details[open] .chevron { transform: rotate(90deg); }
+    .chevron { transition: transform 0.2s ease; display: inline-block; }
+
+    /* Chart tooltip dark override */
+    .chartjs-tooltip {
+      background: #1e293b !important;
+      border: 1px solid rgba(148,163,184,0.2) !important;
+    }
+
+    /* Section group label */
+    .group-label { letter-spacing: 0.18em; }
+  </style>
+</head>
+
+<body class="relative bg-slate-900 text-slate-100 min-h-screen font-sans antialiased">
+
+  {# ── Sticky mini-status — slides in once the hero scrolls out of view ── #}
+  <div id="ticker" hx-get="/partials/ticker" hx-trigger="load, every 4s" hx-swap="innerHTML"
+       class="fixed top-0 left-0 right-0 z-30 opacity-0 -translate-y-full pointer-events-none transition-all duration-200
+              bg-slate-900/85 backdrop-blur border-b border-slate-700/50"></div>
+
+  <div class="relative z-10 max-w-6xl mx-auto px-4 py-6 md:px-6 md:py-8 space-y-4">
+
+    {# ── Header ──────────────────────────────────────────────────── #}
+    <header class="fade-up flex items-center justify-between mb-2">
+      <div class="flex items-center gap-3">
+        {# Solar icon #}
+        <div class="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shadow-lg shadow-amber-900/20">
+          <svg class="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+            <circle cx="12" cy="12" r="5"/><path stroke-linecap="round" d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-base font-semibold tracking-tight leading-none">{{ t('app_title') }}</h1>
+          <p class="text-[11px] text-slate-500 mt-0.5 font-mono tracking-wide">{{ t('app_subtitle') }}</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        {# Language toggle #}
+        <span class="flex items-center text-[11px] font-mono border border-slate-700/60 rounded-lg overflow-hidden">
+          <a href="/lang/de" class="px-2 py-1.5 {{ 'bg-sky-500/20 text-sky-300' if lang == 'de' else 'text-slate-500 hover:text-slate-200' }}">DE</a>
+          <a href="/lang/en" class="px-2 py-1.5 {{ 'bg-sky-500/20 text-sky-300' if lang == 'en' else 'text-slate-500 hover:text-slate-200' }}">EN</a>
+        </span>
+        {# Settings gear → opens modal #}
+        <button type="button" onclick="openSettings()" aria-label="{{ t('settings') }}"
+          class="text-slate-400 hover:text-slate-100 border border-slate-700/60 hover:border-slate-500/60 hover:bg-slate-700/30 p-2 rounded-lg transition-all duration-150">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+        </button>
+        <a class="text-xs font-mono text-sky-400/80 hover:text-sky-300 border border-sky-500/20 hover:border-sky-400/40 px-3 py-1.5 rounded-lg transition-all duration-150 flex items-center gap-1.5"
+           href="{{ grafana }}" target="_blank">
+          Grafana
+          <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+          </svg>
+        </a>
+      </div>
+    </header>
+
+    {# ── Hero: mode control + Warum card (full width) ─────────────── #}
+    <div class="fade-up fade-up-1 space-y-3">
+      {% include "partials/control.html" %}
+      <div id="why" hx-get="/partials/why" hx-trigger="load, every 4s" hx-swap="innerHTML"></div>
+    </div>
+
+    {# ── 2-column: Live (left, wide) / Komponenten (right) ────────── #}
+    <p class="group-label text-[10px] uppercase text-slate-500 px-1">{{ t('group_live') }}</p>
+
+        {# Status KPIs (HTMX-polled) #}
+        <div id="status" hx-get="/partials/status" hx-trigger="load, every 4s" hx-swap="innerHTML"
+             class="fade-up fade-up-2 bg-slate-800/80 border border-slate-700/60 rounded-xl shadow-lg shadow-black/30 px-4 py-4">
+          {% include "partials/status.html" %}
+        </div>
+
+        {# Heute chart — surplus + threshold + WP-run band (merged timeline) #}
+        <section class="fade-up fade-up-3 bg-slate-800/80 border border-slate-700/60 rounded-xl shadow-lg shadow-black/30 px-4 py-4">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-[10px] uppercase tracking-[0.14em] text-slate-400">{{ t('sec_today_chart') }}</h2>
+            <span class="text-[10px] font-mono text-slate-600">{{ t('every', s=60) }}</span>
+          </div>
+          <div class="relative h-60 sm:h-56 md:h-64">
+            <canvas id="todayChart"></canvas>
+          </div>
+        </section>
+
+    {# ── Komponenten (balanced card grid) ─────────────────────────── #}
+    <p class="group-label text-[10px] uppercase text-slate-500 px-1 pt-2">{{ t('group_components') }}</p>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+        {# Wärmepumpe (ViCare) — left column with the Wechselrichter below it #}
+        <section class="fade-up fade-up-2 bg-slate-800/80 border border-slate-700/60 rounded-xl shadow-lg shadow-black/30 px-4 py-4">
+          <h2 class="text-[10px] uppercase tracking-[0.14em] text-slate-400 mb-3">{{ t('sec_vicare') }}</h2>
+          <div id="vicare" hx-get="/partials/vicare" hx-trigger="load, every 60s" hx-swap="innerHTML"></div>
+        </section>
+
+        {# Heute & Wirksamkeit — right column, directly above the weather #}
+        <section class="fade-up fade-up-2 bg-slate-800/80 border border-slate-700/60 rounded-xl shadow-lg shadow-black/30 px-4 py-4">
+          <h2 class="text-[10px] uppercase tracking-[0.14em] text-slate-400 mb-3">{{ t('sec_balance') }}</h2>
+          <div id="balance" hx-get="/partials/balance" hx-trigger="load, every 60s" hx-swap="innerHTML"></div>
+        </section>
+
+        {# Wechselrichter (SMA) #}
+        <section class="fade-up fade-up-3 bg-slate-800/80 border border-slate-700/60 rounded-xl shadow-lg shadow-black/30 px-4 py-4">
+          <h2 class="text-[10px] uppercase tracking-[0.14em] text-slate-400 mb-3">{{ t('sec_inverter') }}</h2>
+          <div id="inverter" hx-get="/partials/inverter" hx-trigger="load, every 30s" hx-swap="innerHTML"></div>
+        </section>
+
+        {# Wetter (Open-Meteo) #}
+        <section class="fade-up fade-up-4 bg-slate-800/80 border border-slate-700/60 rounded-xl shadow-lg shadow-black/30 px-4 py-4">
+          <h2 class="text-[10px] uppercase tracking-[0.14em] text-slate-400 mb-3">{{ t('weather_title') }}</h2>
+          <div id="weather" hx-get="/partials/weather" hx-trigger="load, every 600s" hx-swap="innerHTML"></div>
+          <div class="relative h-48 mt-4">
+            <canvas id="weatherChart"></canvas>
+          </div>
+        </section>
+    </div>
+
+    {# ── Analyse (full width) ─────────────────────────────────────── #}
+    <p class="group-label text-[10px] uppercase text-slate-500 px-1 pt-3">{{ t('group_analysis') }}</p>
+
+    {# Wirksamkeit (Fenster wählbar) #}
+    <section class="fade-up bg-slate-800/80 border border-slate-700/60 rounded-xl shadow-lg shadow-black/30 px-4 py-4">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-[10px] uppercase tracking-[0.14em] text-slate-400">{{ t('sec_eff') }}</h2>
+        <div id="effWin" class="flex gap-1.5 text-[11px] font-mono">
+          <button type="button" data-w="7d"   class="effwin px-2.5 py-1 rounded border border-slate-600/60 text-slate-300">{{ t('btn_7d') }}</button>
+          <button type="button" data-w="30d"  class="effwin px-2.5 py-1 rounded border border-slate-600/60 text-slate-300">{{ t('btn_30d') }}</button>
+          <button type="button" data-w="90d"  class="effwin px-2.5 py-1 rounded border border-slate-600/60 text-slate-300">{{ t('btn_90d') }}</button>
+          <button type="button" data-w="365d" class="effwin px-2.5 py-1 rounded border border-slate-600/60 text-slate-300">{{ t('btn_365d') }}</button>
+        </div>
+      </div>
+      <div class="relative h-44 sm:h-40 md:h-36">
+        <canvas id="eff7dChart"></canvas>
+      </div>
+    </section>
+
+    {# ── WP-Historie (collapsible, lazy-loaded) ───────────────────── #}
+    <section class="fade-up bg-slate-800/80 border border-slate-700/60 rounded-xl shadow-lg shadow-black/30 px-4 py-4">
+      <details id="wpHistDetails">
+        <summary class="flex items-center justify-between cursor-pointer select-none">
+          <span class="text-[10px] uppercase tracking-[0.14em] text-slate-400 flex items-center gap-1.5">
+            <svg class="chevron w-3 h-3 text-slate-500 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+            </svg>
+            {{ t('sec_history') }}
+          </span>
+          <span class="text-[10px] font-mono text-slate-600">{{ t('hist_sub') }}</span>
+        </summary>
+        <div class="mt-4">
+          <div id="wpHistWin" class="flex gap-1.5 mb-4 text-[11px] font-mono">
+            <button type="button" data-w="24h" class="wpwin px-2.5 py-1 rounded border border-slate-600/60 text-slate-300">24 h</button>
+            <button type="button" data-w="7d"  class="wpwin px-2.5 py-1 rounded border border-slate-600/60 text-slate-300">{{ t('btn_7d') }}</button>
+            <button type="button" data-w="30d" class="wpwin px-2.5 py-1 rounded border border-slate-600/60 text-slate-300">{{ t('btn_30d') }}</button>
+            <button type="button" data-w="90d" class="wpwin px-2.5 py-1 rounded border border-slate-600/60 text-slate-300">{{ t('btn_90d') }}</button>
+            <button type="button" data-w="365d" class="wpwin px-2.5 py-1 rounded border border-slate-600/60 text-slate-300">{{ t('btn_365d') }}</button>
+          </div>
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-5 gap-y-4">
+            <div class="lg:col-span-2">
+              <h3 class="text-[10px] uppercase tracking-[0.14em] text-slate-500 mb-2">
+                {{ t('hist_savings') }}
+                <span class="text-amber-500/70 normal-case tracking-normal">{{ t('hist_savings_note') }}</span>
+              </h3>
+              <div class="relative h-44"><canvas id="wpSaveChart"></canvas></div>
+            </div>
+            <div>
+              <h3 class="text-[10px] uppercase tracking-[0.14em] text-slate-500 mb-2">{{ t('hist_temps') }}</h3>
+              <div class="relative h-44"><canvas id="wpTempsChart"></canvas></div>
+            </div>
+            <div>
+              <h3 class="text-[10px] uppercase tracking-[0.14em] text-slate-500 mb-2">{{ t('hist_run') }}</h3>
+              <div class="relative h-44"><canvas id="wpRunChart"></canvas></div>
+            </div>
+            <div>
+              <h3 class="text-[10px] uppercase tracking-[0.14em] text-slate-500 mb-2">{{ t('hist_comp') }}</h3>
+              <div class="relative h-44"><canvas id="wpCompChart"></canvas></div>
+            </div>
+            <div>
+              <h3 class="text-[10px] uppercase tracking-[0.14em] text-slate-500 mb-2">
+                {{ t('hist_eff') }} <span class="text-amber-500/70 normal-case tracking-normal">{{ t('hist_eff_note') }}</span>
+              </h3>
+              <div class="relative h-44"><canvas id="wpEffChart"></canvas></div>
+            </div>
+            <div class="lg:col-span-2">
+              <h3 class="text-[10px] uppercase tracking-[0.14em] text-slate-500 mb-2">
+                {{ t('hist_strings') }} <span class="text-slate-600 normal-case tracking-normal">{{ t('hist_strings_note') }}</span>
+              </h3>
+              <div class="relative h-44"><canvas id="wpStringsChart"></canvas></div>
+            </div>
+          </div>
+        </div>
+      </details>
+    </section>
+
+    {# ── Decisions table (HTMX-polled partial) ────────────────────── #}
+    <section class="fade-up bg-slate-800/80 border border-slate-700/60 rounded-xl shadow-lg shadow-black/30 px-4 py-4">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-[10px] uppercase tracking-[0.14em] text-slate-400">{{ t('decisions_title') }}</h2>
+        <span class="text-[10px] font-mono text-slate-600">{{ t('updated_every', s=30) }}</span>
+      </div>
+      {# stable scroll wrapper — NOT the HTMX target, so the scroll position survives the 30 s refresh #}
+      <div class="max-h-96 overflow-auto rounded-lg">
+        <div id="decisions" hx-get="/partials/decisions" hx-trigger="load, every 30s" hx-swap="innerHTML">
+          {% include "partials/decisions.html" %}
+        </div>
+      </div>
+    </section>
+
+    {# ── Settings modal (opened via header gear) ──────────────────── #}
+    <div id="settingsModal" class="hidden fixed inset-0 z-50 items-start justify-center px-4 py-8 overflow-y-auto">
+      <div class="absolute inset-0 bg-slate-950/70 backdrop-blur-sm" onclick="closeSettings()"></div>
+      <div class="relative z-10 w-full max-w-2xl bg-slate-800 border border-slate-700/70 rounded-xl shadow-2xl shadow-black/50 fade-up">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-slate-700/60">
+          <h2 class="text-[11px] uppercase tracking-[0.14em] text-slate-300 flex items-center gap-2">
+            <svg class="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+            {{ t('settings') }}
+          </h2>
+          <button type="button" onclick="closeSettings()" aria-label="✕"
+            class="text-slate-500 hover:text-slate-200 hover:bg-slate-700/40 p-1.5 rounded-lg transition-colors duration-150">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+        <div id="settings" class="px-5 py-4 max-h-[70vh] overflow-y-auto">
+          {% include "partials/settings.html" %}
+        </div>
+      </div>
+    </div>
+
+  </div>{# /max-w container #}
+
+  {# ── Chart.js init (wiring contract — keep intact) ────────────── #}
+  <script>
+    /* ── Heute chart: surplus + threshold lines + WP-run band (merged timeline) ── */
+    async function drawChart() {
+     try {
+      const [sr, tl] = await Promise.all([
+        fetch('/api/series').then(r => r.json()),
+        fetch('/api/wp-timeline').then(r => r.json()).catch(() => ({relay: []})),
+      ]);
+      const toXY = a => a.map(([t,v]) => ({x: t*1000, y: v}));
+      const relay = (tl.relay || []).map(([t,v]) => ({x: t*1000, y: v >= 0.5 ? 1 : 0}));
+      const ctx = document.getElementById('todayChart');
+      if (window._c) window._c.destroy();
+      window._c = new Chart(ctx, {
+        type: 'line',
+        data: {
+          datasets: [
+            { label: {{ t('ch_wp_on')|tojson }}, data: relay, yAxisID: 'yRelay', order: 99,
+              stepped: true, fill: true, pointRadius: 0, borderWidth: 0,
+              backgroundColor: 'rgba(52,211,153,0.10)' },
+            {
+              label: {{ t('ch_surplus')|tojson }},
+              data: toXY(sr.surplus),
+              borderColor: '#34d399',
+              backgroundColor: 'rgba(52,211,153,0.06)',
+              fill: true,
+              tension: .3,
+              pointRadius: 0,
+              borderWidth: 1.8,
+            },
+            {
+              label: {{ t('ch_threshold')|tojson }},
+              data: toXY(sr.threshold),
+              borderColor: '#475569',
+              borderDash: [5, 5],
+              pointRadius: 0,
+              borderWidth: 1.5,
+              tension: 0,
+            },
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          scales: {
+            x: {
+              type: 'time',
+              time: { unit: 'hour' },
+              grid: { color: 'rgba(148,163,184,0.06)' },
+              ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } },
+            },
+            y: {
+              grid: { color: 'rgba(148,163,184,0.06)' },
+              ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } },
+            },
+            yRelay: { display: false, min: 0, max: 1 }
+          },
+          plugins: {
+            legend: {
+              labels: {
+                color: '#94a3b8',
+                font: { family: 'DM Sans', size: 11 },
+                boxWidth: 14,
+                padding: 16,
+                filter: (item) => item.text !== {{ t('ch_wp_on')|tojson }},
+              }
+            },
+            tooltip: {
+              backgroundColor: '#1e293b',
+              borderColor: 'rgba(148,163,184,0.2)',
+              borderWidth: 1,
+              titleColor: '#94a3b8',
+              bodyColor: '#e2e8f0',
+              titleFont: { family: 'JetBrains Mono', size: 11 },
+              bodyFont: { family: 'JetBrains Mono', size: 11 },
+              filter: (item) => item.dataset.label !== {{ t('ch_wp_on')|tojson }},
+            }
+          }
+        }
+      });
+     } catch (e) { console.warn('drawChart failed, retry in 3s', e); setTimeout(drawChart, 3000); }
+    }
+    drawChart(); setInterval(drawChart, 60000);
+
+    /* ── Weather hourly chart (cloud cover + temperature, next 24h) ── */
+    async function drawWeather() {
+     try {
+      const r = await fetch('/api/weather'); const d = await r.json();
+      if (!d.time || !d.time.length) return;
+      const N = Math.min(24, d.time.length);
+      const ctx = document.getElementById('weatherChart'); if (!ctx) return;
+      if (window._w) window._w.destroy();
+      window._w = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: d.time.slice(0, N),
+          datasets: [
+            { label: {{ t('ch_cloud')|tojson }}, data: d.cloud.slice(0, N), yAxisID: 'yc',
+              borderColor: '#64748b', backgroundColor: 'rgba(100,116,139,0.12)', fill: true,
+              pointRadius: 0, borderWidth: 1.5, tension: .3 },
+            { label: {{ t('ch_temp')|tojson }}, data: d.temp.slice(0, N), yAxisID: 'yt',
+              borderColor: '#fbbf24', pointRadius: 0, borderWidth: 1.8, tension: .3 },
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          scales: {
+            x: { type: 'time', time: { unit: 'hour' },
+                 grid: { color: 'rgba(148,163,184,0.06)' },
+                 ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } } },
+            yc: { position: 'left', min: 0, max: 100,
+                  grid: { color: 'rgba(148,163,184,0.06)' },
+                  ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } } },
+            yt: { position: 'right', grid: { drawOnChartArea: false },
+                  ticks: { color: '#fbbf24', font: { family: 'JetBrains Mono', size: 10 } } },
+          },
+          plugins: { legend: { labels: { color: '#94a3b8', font: { family: 'DM Sans', size: 11 },
+                     boxWidth: 14, padding: 12 } } }
+        }
+      });
+     } catch (e) { console.warn('drawWeather failed, retry in 5s', e); setTimeout(drawWeather, 5000); }
+    }
+    drawWeather(); setInterval(drawWeather, 600000);
+
+    /* ── Effectiveness (estimated self-used kWh/€, window selectable) ── */
+    let effWin = '7d';
+    async function drawEff7d() {
+     try {
+      const r = await fetch('/api/effectiveness?window=' + effWin); const d = await r.json();
+      const days = d.days || [];
+      const ctx = document.getElementById('eff7dChart'); if (!ctx) return;
+      if (window._e7) window._e7.destroy();
+      window._e7 = new Chart(ctx, {
+        type: 'bar',
+        data: { labels: days.map(x => x.day), datasets: [{
+          label: 'kWh', data: days.map(x => x.kwh),
+          backgroundColor: 'rgba(251,191,36,0.55)', borderColor: '#fbbf24', borderWidth: 1, borderRadius: 3 }] },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: (c) => { const x = days[c.dataIndex];
+              return ` ${x.kwh} kWh ≈ ${x.eur.toFixed(2)} € · ${x.runtime_h} h`; } },
+              backgroundColor: '#1e293b', borderColor: 'rgba(148,163,184,0.2)', borderWidth: 1,
+              titleColor: '#94a3b8', bodyColor: '#e2e8f0',
+              titleFont: { family: 'JetBrains Mono', size: 11 }, bodyFont: { family: 'JetBrains Mono', size: 11 } }
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } } },
+            y: { grid: { color: 'rgba(148,163,184,0.06)' }, beginAtZero: true,
+                 ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } } }
+          }
+        }
+      });
+     } catch (e) { console.warn('drawEff7d retry in 5s', e); setTimeout(drawEff7d, 5000); }
+    }
+    function setEffWindow(win) {
+      effWin = win;
+      document.querySelectorAll('#effWin .effwin').forEach(b => {
+        const on = b.dataset.w === win;
+        b.classList.toggle('bg-sky-500/20', on); b.classList.toggle('border-sky-400/60', on);
+        b.classList.toggle('text-sky-300', on); b.classList.toggle('text-slate-300', !on);
+      });
+      drawEff7d();
+    }
+    document.querySelectorAll('#effWin .effwin').forEach(b =>
+      b.addEventListener('click', () => setEffWindow(b.dataset.w)));
+    setEffWindow('7d'); setInterval(drawEff7d, 300000);
+
+    /* ── Settings modal open/close ── */
+    function openSettings() {
+      const m = document.getElementById('settingsModal');
+      m.classList.remove('hidden'); m.classList.add('flex');
+    }
+    function closeSettings() {
+      const m = document.getElementById('settingsModal');
+      m.classList.add('hidden'); m.classList.remove('flex');
+    }
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSettings(); });
+
+    /* ── Sticky ticker: reveal once scrolled past the hero ── */
+    (function () {
+      const bar = document.getElementById('ticker');
+      const upd = () => {
+        const show = window.scrollY > 260;
+        bar.classList.toggle('opacity-0', !show);
+        bar.classList.toggle('-translate-y-full', !show);
+        bar.classList.toggle('pointer-events-none', !show);
+      };
+      window.addEventListener('scroll', upd, { passive: true }); upd();
+    })();
+  </script>
+
+  {# ── WP-Historie charts (lazy: first render on details-open) ──── #}
+  <script>
+    const MONO = { family: 'JetBrains Mono', size: 10 };
+    const GRID = 'rgba(148,163,184,0.06)';
+    const TIP = { backgroundColor: '#1e293b', borderColor: 'rgba(148,163,184,0.2)', borderWidth: 1,
+                  titleColor: '#94a3b8', bodyColor: '#e2e8f0',
+                  titleFont: { family: 'JetBrains Mono', size: 11 }, bodyFont: { family: 'JetBrains Mono', size: 11 } };
+    const wpHist = { window: '24h', loaded: false, charts: {} };
+
+    function wpLine(label, data, color, axis = 'y') {
+      return { label, data, borderColor: color, backgroundColor: color, yAxisID: axis,
+               borderWidth: 1.5, pointRadius: 0, tension: 0.3, spanGaps: true };
+    }
+    function wpTimeX(unit) {
+      return { type: 'time', time: { unit, tooltipFormat: 'dd.MM HH:mm' }, grid: { display: false },
+               ticks: { color: '#64748b', font: MONO, maxRotation: 0, autoSkipPadding: 16 } };
+    }
+    function wpY(opts) {
+      return Object.assign({ grid: { color: GRID }, ticks: { color: '#64748b', font: MONO } }, opts);
+    }
+    function wpBase(extra) {
+      return Object.assign({ responsive: true, maintainAspectRatio: false, animation: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { labels: { color: '#94a3b8', font: MONO, boxWidth: 10, boxHeight: 10 } }, tooltip: TIP } }, extra || {});
+    }
+
+    async function loadWpHistory(win) {
+      try {
+        const r = await fetch('/api/wp-history?window=' + win); const d = await r.json();
+        const unit = win === '24h' ? 'hour' : (win === '365d' ? 'month' : 'day');
+        Object.values(wpHist.charts).forEach(c => c && c.destroy());
+        const temps = d.temps || [], run = d.run || [], comp = d.comp || [], eff = d.eff || [], sav = d.savings || [], strings = d.strings || [];
+
+        wpHist.charts.s = new Chart(document.getElementById('wpSaveChart'), {
+          type: 'bar',
+          data: { labels: sav.map(s => s.day), datasets: [
+            { type: 'bar', label: {{ t('ch_pv')|tojson }}, data: sav.map(s => s.pv_kwh), stack: 'wp', yAxisID: 'y',
+              backgroundColor: 'rgba(52,211,153,0.6)', borderColor: '#34d399', borderWidth: 1 },
+            { type: 'bar', label: {{ t('ch_grid')|tojson }}, data: sav.map(s => s.grid_kwh), stack: 'wp', yAxisID: 'y',
+              backgroundColor: 'rgba(100,116,139,0.45)', borderColor: '#64748b', borderWidth: 1 },
+            { type: 'line', label: {{ t('ch_saved_cum')|tojson }}, data: sav.map(s => s.cum_eur), yAxisID: 'yr',
+              borderColor: '#fbbf24', backgroundColor: '#fbbf24', borderWidth: 2, pointRadius: 2, tension: 0.3 } ] },
+          options: wpBase({ plugins: { legend: { labels: { color: '#94a3b8', font: MONO, boxWidth: 10, boxHeight: 10 } },
+            tooltip: Object.assign({}, TIP, { callbacks: { afterBody: (items) => {
+              const s = sav[items[0].dataIndex]; return s ? '→ ' + s.saved_eur.toFixed(2) + ' ' + {{ t('ch_saved')|tojson }} : ''; } } }) },
+            scales: {
+              x: { stacked: true, grid: { display: false }, ticks: { color: '#64748b', font: MONO } },
+              y: { stacked: true, beginAtZero: true, grid: { color: GRID },
+                   ticks: { color: '#64748b', font: MONO }, title: { display: true, text: 'kWh', color: '#64748b', font: MONO } },
+              yr: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false },
+                    ticks: { color: '#64748b', font: MONO, callback: v => v + ' €' } } } }) });
+
+        wpHist.charts.t = new Chart(document.getElementById('wpTempsChart'), {
+          type: 'line', data: { datasets: [
+            wpLine({{ t('ch_dhw')|tojson }}, temps.map(p => ({ x: p.t, y: p.dhw })), '#fb7185'),
+            wpLine({{ t('ch_buffer')|tojson }}, temps.map(p => ({ x: p.t, y: p.buffer })), '#fbbf24'),
+            wpLine({{ t('ch_supply')|tojson }}, temps.map(p => ({ x: p.t, y: p.supply })), '#fb923c'),
+            wpLine({{ t('ch_outside')|tojson }}, temps.map(p => ({ x: p.t, y: p.outside })), '#38bdf8') ] },
+          options: wpBase({ scales: { x: wpTimeX(unit), y: wpY({}) } }) });
+
+        wpHist.charts.st = new Chart(document.getElementById('wpStringsChart'), {
+          type: 'line', data: { datasets: [
+            wpLine({{ t('ch_east')|tojson }}, strings.map(p => ({ x: p.t, y: p.a })), '#fbbf24'),
+            wpLine({{ t('ch_west')|tojson }}, strings.map(p => ({ x: p.t, y: p.b })), '#38bdf8') ] },
+          options: wpBase({ scales: { x: wpTimeX(unit), y: wpY({ beginAtZero: true,
+            title: { display: true, text: 'W', color: '#64748b', font: MONO } }) } }) });
+
+        wpHist.charts.r = new Chart(document.getElementById('wpRunChart'), {
+          type: 'line', data: { datasets: [
+            wpLine({{ t('ch_surplus')|tojson }}, run.map(p => ({ x: p.t, y: p.surplus })), '#34d399', 'y'),
+            { label: {{ t('ch_wp_on')|tojson }}, data: run.map(p => ({ x: p.t, y: p.on_frac })), yAxisID: 'yr',
+              borderColor: 'rgba(148,163,184,0.45)', backgroundColor: 'rgba(148,163,184,0.16)',
+              fill: true, stepped: true, pointRadius: 0, borderWidth: 1 } ] },
+          options: wpBase({ scales: { x: wpTimeX(unit),
+            y: wpY({ title: { display: true, text: 'W', color: '#64748b', font: MONO } }),
+            yr: { position: 'right', min: 0, max: 1, grid: { drawOnChartArea: false },
+                  ticks: { color: '#64748b', font: MONO, callback: v => (v * 100) + '%' } } } }) });
+
+        wpHist.charts.c = new Chart(document.getElementById('wpCompChart'), {
+          type: 'bar',
+          data: { datasets: [
+            Object.assign(wpLine({{ t('ch_rps')|tojson }}, comp.map(p => ({ x: p.t, y: p.rps })), '#a78bfa', 'y'), { type: 'line' }),
+            { type: 'bar', label: {{ t('starts')|tojson }}, data: comp.map(p => ({ x: p.t, y: p.starts })), yAxisID: 'yr',
+              backgroundColor: 'rgba(96,165,250,0.40)', borderColor: '#60a5fa', borderWidth: 1 } ] },
+          options: wpBase({ scales: { x: wpTimeX(unit), y: wpY({ beginAtZero: true }),
+            yr: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false },
+                  ticks: { color: '#64748b', font: MONO, precision: 0 } } } }) });
+
+        wpHist.charts.e = new Chart(document.getElementById('wpEffChart'), {
+          type: 'bar',
+          data: { labels: eff.map(e => e.day), datasets: [
+            { type: 'bar', label: {{ t('ch_kwh_est')|tojson }}, data: eff.map(e => e.kwh), yAxisID: 'y',
+              backgroundColor: 'rgba(251,191,36,0.55)', borderColor: '#fbbf24', borderWidth: 1, borderRadius: 3 },
+            { type: 'line', label: 'SCOP', data: eff.map(e => e.scop), yAxisID: 'yr',
+              borderColor: '#34d399', backgroundColor: '#34d399', borderWidth: 1.5, pointRadius: 2, tension: 0.3, spanGaps: true } ] },
+          options: wpBase({ scales: {
+            x: { grid: { display: false }, ticks: { color: '#64748b', font: MONO } },
+            y: wpY({ beginAtZero: true }),
+            yr: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false },
+                  ticks: { color: '#64748b', font: MONO } } } }) });
+      } catch (e) { console.warn('loadWpHistory failed', e); }
+    }
+
+    function setWpWindow(win) {
+      wpHist.window = win;
+      document.querySelectorAll('#wpHistWin .wpwin').forEach(b => {
+        const on = b.dataset.w === win;
+        b.classList.toggle('bg-sky-500/20', on); b.classList.toggle('border-sky-400/60', on);
+        b.classList.toggle('text-sky-300', on); b.classList.toggle('text-slate-300', !on);
+      });
+      loadWpHistory(win);
+    }
+    document.querySelectorAll('#wpHistWin .wpwin').forEach(b =>
+      b.addEventListener('click', () => setWpWindow(b.dataset.w)));
+    document.getElementById('wpHistDetails').addEventListener('toggle', function () {
+      if (this.open && !wpHist.loaded) { wpHist.loaded = true; setWpWindow(wpHist.window); }
+    });
+  </script>
+</body>
+</html>

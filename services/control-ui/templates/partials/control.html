@@ -1,0 +1,43 @@
+<section class="bg-slate-800/80 border border-slate-700/60 rounded-xl shadow-lg shadow-black/30 px-4 py-4" id="control">
+  <form hx-post="/control" hx-target="#control" hx-swap="outerHTML"
+        class="flex flex-wrap items-center gap-3">
+
+    <span class="text-[10px] uppercase tracking-[0.14em] text-slate-400 font-sans mr-1 self-center">{{ t('mode') }}</span>
+
+    {# Segmented mode buttons with per-mode accent colors #}
+    {% for m, label, active_cls, ring_cls in [
+        ('auto',   t('mode_auto'),    'bg-emerald-600/90 text-white shadow-emerald-900/60 ring-1 ring-emerald-500/60', 'hover:bg-emerald-700/60'),
+        ('manual', t('mode_manual'), 'bg-amber-600/90   text-white shadow-amber-900/60   ring-1 ring-amber-500/60',   'hover:bg-amber-700/60'),
+        ('paused', t('mode_paused'),   'bg-rose-600/90    text-white shadow-rose-900/60    ring-1 ring-rose-500/60',    'hover:bg-rose-700/60'),
+    ] %}
+      <button
+        type="submit"
+        name="mode"
+        value="{{ m }}"
+        class="px-4 py-2 rounded-lg text-sm font-sans font-medium transition-all duration-150
+               {% if cfg.mode == m %}
+                 {{ active_cls }} shadow-lg
+               {% else %}
+                 bg-slate-700/70 text-slate-300 {{ ring_cls }} border border-slate-600/50
+               {% endif %}"
+      >{{ label }}</button>
+    {% endfor %}
+
+    {# Manual relay toggle — only shown in manual mode #}
+    {% if cfg.mode == 'manual' %}
+      <label class="ml-2 flex items-center gap-2.5 text-sm font-sans text-slate-300 cursor-pointer
+                    select-none bg-slate-700/60 border border-slate-600/50 rounded-lg px-3 py-2
+                    hover:border-amber-500/40 transition-colors duration-150">
+        <input
+          type="checkbox"
+          name="manual_relay_on"
+          {% if cfg.manual_relay_on %}checked{% endif %}
+          onchange="this.form.requestSubmit()"
+          class="w-4 h-4 rounded accent-amber-500 cursor-pointer"
+        >
+        <span>WP <span class="font-mono text-amber-400">{{ t('on') }}</span></span>
+      </label>
+    {% endif %}
+
+  </form>
+</section>

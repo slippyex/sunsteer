@@ -1,0 +1,94 @@
+{% set v = v %}
+{% macro num(val, unit='', dp=1) -%}
+  {%- if val is not none -%}{{ val|round(dp) }}<span class="text-slate-500 text-xs ml-0.5">{{ unit }}</span>
+  {%- else -%}<span class="text-slate-600">&ndash;</span>{%- endif -%}
+{%- endmacro %}
+
+{# ── Temperatures ──────────────────────────────────────────────── #}
+<div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+  <div class="bg-slate-800/60 rounded-xl border border-slate-700/60 border-t-2 border-t-rose-500/70 px-3 py-3 flex flex-col gap-0.5">
+    <span class="text-[10px] uppercase tracking-[0.14em] text-slate-400">{{ t('dhw_tank') }}</span>
+    <span class="font-mono text-xl font-semibold text-rose-300 tabular-nums">{{ num(v.dhw_temp, '°C') }}</span>
+    <span class="text-[10px] text-slate-500 font-mono">{{ t('target') }} {{ num(v.dhw_target, '°C', 0) }}</span>
+  </div>
+  <div class="bg-slate-800/60 rounded-xl border border-slate-700/60 border-t-2 border-t-amber-500/70 px-3 py-3 flex flex-col gap-0.5">
+    <span class="text-[10px] uppercase tracking-[0.14em] text-slate-400">{{ t('buffer') }}</span>
+    <span class="font-mono text-xl font-semibold text-amber-300 tabular-nums">{{ num(v.buffer_temp, '°C') }}</span>
+  </div>
+  <div class="bg-slate-800/60 rounded-xl border border-slate-700/60 border-t-2 border-t-sky-500/70 px-3 py-3 flex flex-col gap-0.5">
+    <span class="text-[10px] uppercase tracking-[0.14em] text-slate-400">{{ t('outside') }}</span>
+    <span class="font-mono text-xl font-semibold text-sky-300 tabular-nums">{{ num(v.outside_temp, '°C') }}</span>
+  </div>
+  <div class="bg-slate-800/60 rounded-xl border border-slate-700/60 border-t-2 border-t-orange-500/70 px-3 py-3 flex flex-col gap-0.5">
+    <span class="text-[10px] uppercase tracking-[0.14em] text-slate-400">{{ t('supply') }}</span>
+    <span class="font-mono text-xl font-semibold text-orange-300 tabular-nums">{{ num(v.supply_temp, '°C') }}</span>
+  </div>
+</div>
+
+{# ── Efficiency + compressor ───────────────────────────────────── #}
+<div class="flex flex-wrap gap-x-5 gap-y-2 mt-4 text-sm font-sans text-slate-300">
+  <span class="flex items-center gap-2">
+    <span class="text-slate-500 text-xs uppercase tracking-widest">{{ t('cop_today') }}</span>
+    <span class="font-mono font-semibold text-emerald-400" title="{{ t('cop_tip') }}">{{ num(v.cop_today, '', 1) }}</span>
+  </span>
+  <span class="flex items-center gap-2 cursor-help"
+        title="{{ t('scop_tip') }}">
+    <span class="text-slate-500 text-xs uppercase tracking-widest">SCOP</span>
+    <span class="font-mono font-semibold text-emerald-300">{{ num(v.scop, '', 1) }}</span>
+  </span>
+  <span class="flex items-center gap-2 cursor-help"
+        title="{{ t('scop_tip') }}">
+    <span class="text-slate-500 text-xs uppercase tracking-widest">SPF</span>
+    <span class="font-mono font-semibold text-emerald-300">{{ num(v.spf, '', 1) }}</span>
+  </span>
+  <span class="text-slate-700 select-none">·</span>
+  <span class="flex items-center gap-2">
+    <span class="text-slate-500 text-xs uppercase tracking-widest">{{ t('compressor') }}</span>
+    <span class="font-mono text-slate-200">{{ num(v.comp_speed, 'rps', 0) }}</span>
+  </span>
+  <span class="flex items-center gap-2">
+    <span class="text-slate-500 text-xs uppercase tracking-widest">{{ t('starts') }}</span>
+    <span class="font-mono text-slate-300">{{ num(v.comp_starts, '', 0) }}</span>
+  </span>
+  <span class="flex items-center gap-2">
+    <span class="text-slate-500 text-xs uppercase tracking-widest">{{ t('runtime') }}</span>
+    <span class="font-mono text-slate-300">{{ num(v.comp_hours, 'h', 0) }}</span>
+  </span>
+</div>
+
+{# ── Energy (electric + thermal), with freshness note ──────────── #}
+<div class="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1.5 border-t border-slate-700/50 pt-3 text-xs">
+  <span class="text-slate-400 font-sans shrink-0">{{ t('energy_today') }}</span>
+  {% if v.el_pending %}
+    {# ViCare hat den thermischen Tageswert schon, den elektrischen noch nicht (Lag) —
+       kein irreführendes "0,0 kWh el." neben Wärme zeigen. #}
+    <span class="text-slate-500 font-sans italic cursor-help"
+          title="{{ t('el_pending_tip') }}">
+      {{ t('el_pending') }}
+    </span>
+  {% else %}
+    <span class="font-mono text-slate-100 tabular-nums">{{ num(v.e_total, 'kWh') }}</span>
+    <span class="text-slate-500 font-sans">{{ t('elec') }}</span>
+    <span class="text-slate-600 text-[10px] font-mono">({{ t('heating_sh') }} {{ num(v.e_heating, '', 1) }} · {{ t('dhw_sh') }} {{ num(v.e_dhw, '', 1) }})</span>
+  {% endif %}
+  <span class="text-slate-700 select-none">·</span>
+  <span class="font-mono text-amber-300/90 tabular-nums">{{ num(v.th_total, 'kWh') if v.th_total is not none else '&ndash;'|safe }}</span>
+  <span class="text-slate-500 font-sans">{{ t('thermal') }}</span>
+  <span class="text-slate-600 text-[10px] font-mono">({{ t('heating_sh') }} {{ num(v.th_heating, '', 1) }} · {{ t('dhw_sh') }} {{ num(v.th_dhw, '', 1) }})</span>
+  {% if v.energy_read_at_str %}
+    <span class="text-slate-700 select-none hidden md:inline">·</span>
+    <span class="text-[10px] font-sans text-slate-500 cursor-help w-full md:w-auto"
+          title="{{ t('energy_lag_tip') }}">
+      {{ t('energy_asof') }} {{ v.energy_read_at_str }}
+    </span>
+  {% endif %}
+</div>
+
+{% if v.heatingrod_today and v.heatingrod_today > 0 %}
+<div class="mt-2 flex items-center gap-2 text-xs text-amber-400/90 bg-amber-500/10 border border-amber-500/25 rounded-lg px-3 py-1.5">
+  <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+  </svg>
+  <span>{{ t('rod_warn', kwh=v.heatingrod_today|round(1)) }}</span>
+</div>
+{% endif %}

@@ -1,0 +1,60 @@
+{% set w = why %}
+{# Hero card: state-coloured left border so "is the WP running & why" reads at a glance #}
+{% set _b = {'on':'border-l-emerald-500','paused':'border-l-rose-500','manual':'border-l-amber-400',
+             'stale':'border-l-orange-500'}.get(w.state, 'border-l-slate-600') %}
+<div class="bg-slate-800/80 border border-slate-700/60 border-l-4 {{ _b }} rounded-xl shadow-lg shadow-black/30 px-4 py-3.5">
+<div class="flex items-start gap-3.5">
+
+  {# ── State pill — mirrors health-bar pattern from status.html ─────── #}
+  <div class="mt-0.5 flex items-center gap-2 shrink-0">
+    {% if w.state == 'on' %}
+      {# Active: animated ping dot like the live health indicator #}
+      <span class="relative flex h-2.5 w-2.5">
+        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-50"></span>
+        <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400 shadow-lg shadow-emerald-500/40"></span>
+      </span>
+      <span class="text-[10px] uppercase tracking-[0.12em] font-mono text-emerald-400/80 select-none">{{ t('pill_active') }}</span>
+    {% elif w.state == 'paused' %}
+      <span class="relative flex h-2.5 w-2.5">
+        <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500 shadow-lg shadow-rose-600/40"></span>
+      </span>
+      <span class="text-[10px] uppercase tracking-[0.12em] font-mono text-rose-400/80 select-none">{{ t('pill_paused') }}</span>
+    {% elif w.state == 'manual' %}
+      <span class="relative flex h-2.5 w-2.5">
+        <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-400 shadow-lg shadow-amber-500/40"></span>
+      </span>
+      <span class="text-[10px] uppercase tracking-[0.12em] font-mono text-amber-400/80 select-none">{{ t('pill_manual') }}</span>
+    {% else %}
+      <span class="relative flex h-2.5 w-2.5">
+        <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-slate-500"></span>
+      </span>
+      <span class="text-[10px] uppercase tracking-[0.12em] font-mono text-slate-500 select-none">{{ t('pill_idle') }}</span>
+    {% endif %}
+  </div>
+
+  {# ── Headline + optional detail ───────────────────────────────────── #}
+  <div class="flex-1 min-w-0">
+    <div class="text-sm font-medium text-slate-100 leading-snug">
+      {{ w.headline }}{% if w.detail %} <span class="text-slate-600 font-normal">·</span> <span class="text-slate-400 font-normal">{{ w.detail }}</span>{% endif %}
+    </div>
+
+    {# ── Optional progress bar ──────────────────────────────────────── #}
+    {% if w.bar_label %}
+      <div class="mt-2.5">
+        <div class="flex justify-between items-center mb-1.5">
+          <span class="text-[10px] uppercase tracking-[0.12em] text-slate-500 font-sans">{{ w.bar_label }}</span>
+          <span class="text-[10px] font-mono text-sky-400/70 tabular-nums">{{ (w.bar_pct * 100)|round|int }}&thinsp;%</span>
+        </div>
+        <div class="h-1.5 bg-slate-700/70 rounded-full overflow-hidden">
+          <div class="h-full rounded-full transition-all duration-700 ease-out
+                      {% if w.bar_pct >= 0.75 %}bg-emerald-500/80
+                      {% elif w.bar_pct >= 0.4 %}bg-sky-500/80
+                      {% else %}bg-slate-500/80{% endif %}"
+               style="width: {{ (w.bar_pct * 100)|round|int }}%"></div>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+
+</div>
+</div>

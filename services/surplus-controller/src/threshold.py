@@ -1,0 +1,25 @@
+"""Forecast-adaptive ON-threshold."""
+
+
+def adaptive_threshold(cfg: dict, forecast_remaining_kwh) -> float:
+    base = cfg["threshold_base_w"]
+    if not cfg.get("adapt_enabled", True) or forecast_remaining_kwh is None:
+        return base
+    factor = forecast_remaining_kwh / cfg["full_sun_ref_kwh"]
+    factor = max(0.0, min(1.0, factor))
+    return base - (base - cfg["threshold_min_w"]) * factor
+
+
+def available_surplus(surplus_w, relay_on, wp_nominal_power_w) -> float:
+    """The surplus that WOULD exist without the WP running.
+
+    The SHM measures total grid surplus, so while the WP runs its own draw is already
+    subtracted. Add the estimated WP load back when the relay is on, so the ON and OFF
+    decisions compare the SAME quantity (surplus-minus-WP). This removes the measurement
+    feedback loop that would otherwise let the WP's own consumption drive a self-oscillation
+    (turn on -> surplus drops -> turn off -> surplus jumps -> turn on -> ...).
+
+    The compensation uses the (estimated) wp_nominal_power_w since the Shelly is an SG-Ready
+    signal contact and can't meter the WP. Setting wp_nominal_power_w=0 disables it (raw
+    surplus, old behaviour)."""
+    return surplus_w + (wp_nominal_power_w if relay_on else 0.0)

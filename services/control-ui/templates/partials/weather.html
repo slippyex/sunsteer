@@ -1,0 +1,29 @@
+{% if w and w.current %}
+<div class="flex flex-wrap items-center gap-x-8 gap-y-3">
+  {# Current conditions #}
+  <div class="flex items-center gap-3">
+    <span class="text-4xl leading-none">{{ w.current.icon }}</span>
+    <div>
+      <div class="text-2xl font-semibold font-mono leading-none">
+        {{ w.current.temp|round|int if w.current.temp is not none else '–' }}<span class="text-slate-500 text-lg">°C</span>
+      </div>
+      <div class="text-xs text-slate-400 mt-1">
+        {{ t('wmo_' ~ w.current.code, default=w.current.text) }} · {{ t('cloud_cover') }} {{ w.current.cloud|round|int if w.current.cloud is not none else '–' }} %
+      </div>
+    </div>
+  </div>
+
+  {# Today / tomorrow #}
+  {% for label, day in [(t('weather_today'), w.today), (t('weather_tomorrow'), w.tomorrow)] %}
+    {% if day %}
+    <div class="flex flex-col gap-0.5">
+      <div class="text-[10px] uppercase tracking-[0.12em] text-slate-500">{{ label }}</div>
+      <div class="font-mono text-sm text-slate-200">{{ day.icon }} {{ day.tmin }}–{{ day.tmax }} °C</div>
+      <div class="text-xs text-amber-400/80 font-mono">☀ {{ day.sun_h }} {{ t('sun_hours') }}</div>
+    </div>
+    {% endif %}
+  {% endfor %}
+</div>
+{% else %}
+<div class="text-sm text-slate-500">{{ t('weather_unavail') }}</div>
+{% endif %}
