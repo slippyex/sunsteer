@@ -1,0 +1,143 @@
+# Sunsteer — production stack. Copy .env.example to .env, fill in the required
+# values, then:  docker compose up -d --build
+# Optional monitoring:  docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+# Optional ViCare telemetry:  docker compose --profile vicare up -d
+
+services:
+  timescaledb:
+    # Pin to a digest for production once running (the reference install runs PG 16.11).
+    image: timescale/timescaledb:latest-pg16
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASS}
+      POSTGRES_DB: ${DB_NAME:-energy}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../../db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "127.0.0.1:5432:5432"   # loopback only: the host-network exporter connects here
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME:-energy}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  db-migrate:
+    # Applies db/migrations/*.sql in order on every start. Scripts are idempotent
+    # (IF NOT EXISTS guards), so re-running is safe. No-op while the dir is empty.
+    image: timescale/timescaledb:latest-pg16
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${DB_PASS}
+    volumes:
+      - ../../db/migrations:/migrations:ro
+    entrypoint: ["/bin/sh", "-c",
+      "for f in $$(find /migrations -name '*.sql' | sort); do echo \"applying $$f\"; psql -h timescaledb -U ${DB_USER} -d ${DB_NAME:-energy} -v ON_ERROR_STOP=1 -f $$f || exit 1; done; echo 'migrations done'"]
+    restart: "no"
+
+  energy-exporter:
+    build: ../../services/energy-exporter
+    # Host network is REQUIRED for the SMA Speedwire multicast (239.12.255.254:9522) —
+    # it does not cross Docker's bridge NAT. Ports 9120 (metrics) / 9121 (/state) bind
+    # on the host.
+    network_mode: host
+    environment:
+      METER_DRIVER: ${METER_DRIVER:-sma_shm}
+      SHM_HOST: ${SHM_HOST}
+      SHELLY_URL: ${SHELLY_URL}
+      INVERTER_HOST: ${INVERTER_HOST:-}
+      INVERTER_PORT: ${INVERTER_PORT:-502}
+      INVERTER_UNIT_ID: ${INVERTER_UNIT_ID:-3}
+      DB_HOST: 127.0.0.1          # host network -> published loopback port of timescaledb
+      DB_NAME: ${DB_NAME:-energy}
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASS}
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9121/state', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+    restart: unless-stopped
+
+  surplus-controller:
+    build: ../../services/surplus-controller
+    environment:
+      EXPORTER_STATE_URL: http://host.docker.internal:9121/state   # exporter runs on the host net
+      SHELLY_URL: ${SHELLY_URL}
+      PV_LAT: ${PV_LAT}
+      PV_LON: ${PV_LON}
+      PV_TZ: ${PV_TZ:-UTC}
+      PV_PLANES: ${PV_PLANES}
+      SHELLY_AUTOOFF_SECONDS: ${SHELLY_AUTOOFF_SECONDS:-60}
+      DB_HOST: timescaledb
+      DB_NAME: ${DB_NAME:-energy}
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASS}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9124/healthz', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+    restart: unless-stopped
+
+  control-ui:
+    build: ../../services/control-ui
+    environment:
+      PV_LAT: ${PV_LAT}
+      PV_LON: ${PV_LON}
+      PV_TZ: ${PV_TZ:-UTC}
+      UI_DEFAULT_LANG: ${UI_DEFAULT_LANG:-en}
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASS: ${ADMIN_PASS}
+      GRAFANA_URL: ${GRAFANA_URL:-}
+      DB_HOST: timescaledb
+      DB_NAME: ${DB_NAME:-energy}
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASS}
+    ports:
+      - "8080:8080"
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+    restart: unless-stopped
+
+  vicare-exporter:
+    build: ../../services/vicare-exporter
+    profiles: ["vicare"]
+    environment:
+      VICARE_USER: ${VICARE_USER:-}
+      VICARE_PASS: ${VICARE_PASS:-}
+      VICARE_CLIENT_ID: ${VICARE_CLIENT_ID:-}
+      DB_HOST: timescaledb
+      DB_NAME: ${DB_NAME:-energy}
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASS}
+    volumes:
+      - vicare-token:/data
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  vicare-token:
