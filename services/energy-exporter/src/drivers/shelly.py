@@ -22,3 +22,14 @@ def fetch_status(base_url: str, switch_id: int = 0, timeout: float = 5.0):
             return parse_switch_status(json.load(resp))
     except Exception:
         return None
+
+
+class ShellyRelay:
+    """Relay protocol (read side) for Shelly Gen2: polls Switch.GetStatus."""
+
+    def __init__(self, base_url, switch_id=0):
+        self.base_url = base_url
+        self.switch_id = switch_id
+
+    def get_state(self):
+        return fetch_status(self.base_url, self.switch_id)

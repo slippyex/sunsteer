@@ -1,8 +1,8 @@
 import sys
 import types
 
-import src.modbus_client as mb
-from src.modbus_client import parse_s32, parse_u32, parse_u64
+import src.drivers.sma_modbus as mb
+from src.drivers.sma_modbus import parse_s32, parse_u32, parse_u64
 
 
 def test_parse_s32_positive():

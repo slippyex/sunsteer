@@ -1,7 +1,5 @@
-"""energy-exporter: SHM multicast + Shelly poll -> Prometheus + TimescaleDB. READ-ONLY."""
+"""energy-exporter: meter driver + Shelly poll -> Prometheus + TimescaleDB. READ-ONLY."""
 import os
-import socket
-import struct
 import threading
 import time
 
@@ -9,16 +7,13 @@ from prometheus_client import start_http_server
 
 from . import metrics
 from . import state_server
-from .sma_decoder import decode_em_telegram
-from .shelly_client import fetch_status
-from .modbus_client import read_inverter
+from .drivers.shelly import ShellyRelay
+from .drivers.sma_modbus import read_inverter
+from . import drivers
 from . import tsdb_writer
 
-MCAST_GRP = "239.12.255.254"
-MCAST_PORT = 9522
-
-SHM_FILTER = os.environ.get("SHM_HOST")            # required — validated in main()
-SHELLY_URL = os.environ.get("SHELLY_URL")          # required — validated in main()
+SHELLY_URL = os.environ.get("SHELLY_URL")          # optional in mock mode — validated in main()
+METER_DRIVER = os.environ.get("METER_DRIVER", "sma_shm")
 INVERTER_HOST = os.environ.get("INVERTER_HOST", "")  # empty = inverter telemetry disabled
 INVERTER_PORT = int(os.environ.get("INVERTER_PORT", "502"))
 INVERTER_UNIT = int(os.environ.get("INVERTER_UNIT_ID", "3"))
@@ -28,12 +23,20 @@ SHELLY_POLL_S = int(os.environ.get("SHELLY_POLL_SECONDS", "10"))
 INVERTER_POLL_S = int(os.environ.get("INVERTER_POLL_SECONDS", "10"))
 FLUSH_S = int(os.environ.get("TSDB_FLUSH_SECONDS", "60"))
 
-REQUIRED_ENV = ("SHM_HOST", "SHELLY_URL", "DB_HOST", "DB_NAME", "DB_USER", "DB_PASS")
+REQUIRED_ENV_BASE = ("DB_HOST", "DB_NAME", "DB_USER", "DB_PASS")
+REQUIRED_ENV_HARDWARE = ("SHM_HOST", "SHELLY_URL")   # required for hardware drivers; mock needs neither
 
 
 def validate_env():
     """Fail fast with one clear message instead of half-starting against nothing."""
-    missing = [n for n in REQUIRED_ENV if not os.environ.get(n)]
+    driver = os.environ.get("METER_DRIVER", "sma_shm")
+    if driver not in drivers.SUPPORTED_METERS:
+        raise SystemExit(f"energy-exporter: unknown METER_DRIVER '{driver}' "
+                         f"(supported: {', '.join(drivers.SUPPORTED_METERS)})")
+    required = list(REQUIRED_ENV_BASE)
+    if driver != "mock":
+        required += REQUIRED_ENV_HARDWARE
+    missing = [n for n in required if not os.environ.get(n)]
     if missing:
         raise SystemExit("energy-exporter: missing required environment variables: "
                          + ", ".join(missing))
@@ -45,32 +48,21 @@ _last_shelly = None
 _last_inverter = None
 
 
-def shm_listener():
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    s.bind(("", MCAST_PORT))
-    mreq = struct.pack("4sl", socket.inet_aton(MCAST_GRP), socket.INADDR_ANY)
-    s.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
-    while True:
-        data, addr = s.recvfrom(2048)
-        if addr[0] != SHM_FILTER or len(data) < 100:
-            continue
-        r = decode_em_telegram(data)
-        if not r:
-            continue
-        metrics.update_shm(r)
-        # set_shm (not set_state) so /state carries a fresh shm_age_s — the controller
-        # fails the WP safe-off when this stops updating (SHM multicast lost).
-        state_server.set_shm(surplus_w=r["surplus_w"], import_w=r["import_w"],
-                             export_w=r["export_w"])
-        with _buf_lock:
-            _buf.append(r)
+def on_meter_reading(r):
+    metrics.update_shm(r)
+    # set_shm (not set_state) so /state carries a fresh shm_age_s — the controller
+    # fails the WP safe-off when this stops updating (meter readings lost).
+    state_server.set_shm(surplus_w=r["surplus_w"], import_w=r["import_w"],
+                         export_w=r["export_w"])
+    with _buf_lock:
+        _buf.append(r)
 
 
 def shelly_poller():
     global _last_shelly
+    relay = ShellyRelay(SHELLY_URL)
     while True:
-        _last_shelly = fetch_status(SHELLY_URL)
+        _last_shelly = relay.get_state()
         metrics.update_shelly(_last_shelly)
         if _last_shelly:
             state_server.set_state(shelly_on=_last_shelly["relay_on"],
@@ -122,8 +114,10 @@ def main():
             os.environ["DB_HOST"], int(os.environ.get("DB_PORT", "5432")),
             os.environ["DB_NAME"], os.environ["DB_USER"], os.environ["DB_PASS"])
     threading.Thread(target=state_server.serve, args=(STATE_PORT,), daemon=True).start()
-    threading.Thread(target=shm_listener, daemon=True).start()
-    threading.Thread(target=shelly_poller, daemon=True).start()
+    meter = drivers.get_meter(METER_DRIVER)
+    threading.Thread(target=meter.run, args=(on_meter_reading,), daemon=True).start()
+    if SHELLY_URL:
+        threading.Thread(target=shelly_poller, daemon=True).start()
     if INVERTER_HOST:
         threading.Thread(target=inverter_poller, daemon=True).start()
     threading.Thread(target=tsdb_flusher, args=(db_connect,), daemon=True).start()
