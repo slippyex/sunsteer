@@ -15,8 +15,8 @@ from .statemachine import decide
 from .shelly_ctl import set_switch, get_switch
 from .forecast import fetch_all, fetch_gti, pv_estimate
 
-STATE_URL = os.environ.get("EXPORTER_STATE_URL", "http://192.168.2.230:9121/state")
-SHELLY_URL = os.environ.get("SHELLY_URL", "http://192.168.2.90")
+STATE_URL = os.environ.get("EXPORTER_STATE_URL", "http://energy-exporter:9121/state")
+SHELLY_URL = os.environ.get("SHELLY_URL")   # required — validated in main()
 METRICS_PORT = int(os.environ.get("METRICS_PORT", "9123"))
 STATUS_PORT = int(os.environ.get("STATUS_PORT", "9124"))
 LOOP_S = int(os.environ.get("LOOP_SECONDS", "15"))
@@ -29,11 +29,25 @@ STALE_S = int(os.environ.get("STATE_STALE_SECONDS", "30"))
 # (SHELLY_AUTOOFF_SECONDS, 180s).
 STALE_GRACE_CYCLES = int(os.environ.get("STALE_GRACE_CYCLES", "2"))
 FORECAST_S = int(os.environ.get("FORECAST_REFRESH_SECONDS", "10800"))  # 3h
-PV_LAT = os.environ.get("PV_LAT", "49.44424")
-PV_LON = os.environ.get("PV_LON", "7.44393")
-PV_TZ = os.environ.get("PV_TZ", "Europe/Berlin")  # forecast.solar returns local timestamps
+PV_LAT = os.environ.get("PV_LAT")           # required — validated in main()
+PV_LON = os.environ.get("PV_LON")           # required — validated in main()
+PV_TZ = os.environ.get("PV_TZ", "UTC")      # forecast.solar returns local timestamps
 # roof planes as JSON: [[declination, azimuth, kwp], ...]  (azimuth: 0=S, -90=E, +90=W)
-PV_PLANES = json.loads(os.environ.get("PV_PLANES", "[[28,-90,7.26],[28,90,7.92]]"))
+try:
+    PV_PLANES = json.loads(os.environ["PV_PLANES"]) if os.environ.get("PV_PLANES") else None
+except json.JSONDecodeError:
+    raise SystemExit("surplus-controller: PV_PLANES must be valid JSON: [[decl,az,kwp],...]")
+
+REQUIRED_ENV = ("SHELLY_URL", "PV_LAT", "PV_LON", "PV_PLANES",
+                "DB_HOST", "DB_NAME", "DB_USER", "DB_PASS")
+
+
+def validate_env():
+    """Fail fast with one clear message instead of half-starting against nothing."""
+    missing = [n for n in REQUIRED_ENV if not os.environ.get(n)]
+    if missing:
+        raise SystemExit("surplus-controller: missing required environment variables: "
+                         + ", ".join(missing))
 
 _forecast_remaining = None   # kWh, updated by the slow timer
 
@@ -94,6 +108,7 @@ def _db_connect():
 
 
 def main():
+    validate_env()
     start_http_server(METRICS_PORT)
     conn = _db_connect()
     # the forecast thread gets its OWN connection — psycopg2 connections are not

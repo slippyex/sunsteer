@@ -27,7 +27,7 @@ def energy_today(e_total, th_heating, th_dhw):
     return {"th_total": th_total, "el_pending": el_pending, "cop_today": cop_today}
 
 
-def explain(status, cfg, lang="de"):
+def explain(status, cfg, lang="en"):
     """status: controller /status dict (or None). Returns
     {state, headline, detail, bar_label, bar_pct} in the requested language (default de)."""
     def t(key, **fmt):

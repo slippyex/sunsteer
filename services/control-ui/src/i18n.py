@@ -1,12 +1,15 @@
 """Lightweight DE/EN i18n: flat key table + per-request language from cookie/query.
 
 No gettext machinery — a dict is greppable, diffable and exactly as dynamic as this UI
-needs. Default language is German (the original strings), so behaviour and existing
-tests are unchanged unless a user explicitly switches.
+needs. Default language comes from UI_DEFAULT_LANG (en unless overridden); users
+switch per cookie or ?lang= query.
 """
+import os
 
 LANGS = ("de", "en")
-DEFAULT = "de"
+DEFAULT = os.environ.get("UI_DEFAULT_LANG", "en")
+if DEFAULT not in LANGS:
+    DEFAULT = "en"
 
 S = {
     # ── header / navigation ────────────────────────────────────────────────
@@ -262,7 +265,7 @@ _IDX = {"de": 0, "en": 1}
 
 
 def get_lang(request) -> str:
-    """Language from ?lang= (wins) or cookie, validated; default German."""
+    """Language from ?lang= (wins) or cookie, validated; falls back to DEFAULT."""
     lang = request.query_params.get("lang") or request.cookies.get("lang") or DEFAULT
     return lang if lang in LANGS else DEFAULT
 

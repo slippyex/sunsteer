@@ -11,4 +11,5 @@ COPY tests/ ./tests/
 RUN pip install --no-cache-dir pytest && python -m pytest -q
 
 FROM base AS final
+ENV PYTHONUNBUFFERED=1
 CMD ["python", "-m", "src.main"]

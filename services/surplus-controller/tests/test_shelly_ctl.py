@@ -20,25 +20,25 @@ class _FakeResp:
 
 def test_get_switch_reads_output(monkeypatch):
     monkeypatch.setattr(sc.urllib.request, "urlopen", lambda *a, **k: _FakeResp({"output": True}))
-    assert sc.get_switch("http://192.168.2.90") is True
+    assert sc.get_switch("http://192.0.2.90") is True
     monkeypatch.setattr(sc.urllib.request, "urlopen", lambda *a, **k: _FakeResp({"output": False}))
-    assert sc.get_switch("http://192.168.2.90") is False
+    assert sc.get_switch("http://192.0.2.90") is False
 
 
 def test_get_switch_none_on_error(monkeypatch):
     def boom(*a, **k):
         raise OSError("unreachable")
     monkeypatch.setattr(sc.urllib.request, "urlopen", boom)
-    assert sc.get_switch("http://192.168.2.90") is None
+    assert sc.get_switch("http://192.0.2.90") is None
 
 def test_on_includes_toggle_after_watchdog():
-    url = build_set_url("http://192.168.2.90", on=True, switch_id=0, auto_off_s=60)
-    assert url == "http://192.168.2.90/rpc/Switch.Set?id=0&on=true&toggle_after=60"
+    url = build_set_url("http://192.0.2.90", on=True, switch_id=0, auto_off_s=60)
+    assert url == "http://192.0.2.90/rpc/Switch.Set?id=0&on=true&toggle_after=60"
 
 def test_off_has_no_toggle_after():
-    url = build_set_url("http://192.168.2.90", on=False, switch_id=0, auto_off_s=60)
-    assert url == "http://192.168.2.90/rpc/Switch.Set?id=0&on=false"
+    url = build_set_url("http://192.0.2.90", on=False, switch_id=0, auto_off_s=60)
+    assert url == "http://192.0.2.90/rpc/Switch.Set?id=0&on=false"
 
 def test_trailing_slash_stripped():
-    url = build_set_url("http://192.168.2.90/", on=True, switch_id=0, auto_off_s=45)
-    assert url == "http://192.168.2.90/rpc/Switch.Set?id=0&on=true&toggle_after=45"
+    url = build_set_url("http://192.0.2.90/", on=True, switch_id=0, auto_off_s=45)
+    assert url == "http://192.0.2.90/rpc/Switch.Set?id=0&on=true&toggle_after=45"
