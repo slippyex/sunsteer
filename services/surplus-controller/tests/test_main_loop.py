@@ -27,6 +27,10 @@ class Recorder:
 def run_loop(monkeypatch, states, relay_seed=True, cycles=None, cfg_over=None):
     """Run main() for len(states) cycles. states[i] = the /state dict for cycle i (None = blind)."""
     rec = Recorder()
+    for k, v in {"SHELLY_URL": "http://192.0.2.90", "PV_LAT": "50.0", "PV_LON": "8.0",
+                 "PV_PLANES": "[[30,0,5.0]]", "DB_HOST": "db", "DB_NAME": "energy",
+                 "DB_USER": "u", "DB_PASS": "p"}.items():
+        monkeypatch.setenv(k, v)
     cfg = clamp_config({**DEFAULTS, "mode": "auto", **(cfg_over or {})})
     n_cycles = cycles or len(states)
     state_iter = iter(states)

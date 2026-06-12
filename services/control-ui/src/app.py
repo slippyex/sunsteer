@@ -12,17 +12,31 @@ from fastapi.templating import Jinja2Templates
 
 from . import i18n, sources, validation, explain
 
-PROM = os.environ.get("PROMETHEUS_URL", "http://prometheus.monitoring.svc.cluster.local:9090")
-GRAFANA = os.environ.get("GRAFANA_URL", "http://192.168.2.230:30030")
+PROM = os.environ.get("PROMETHEUS_URL", "http://prometheus:9090")
+GRAFANA = os.environ.get("GRAFANA_URL", "")        # empty -> Grafana link hidden in the UI
+
 # Open-Meteo weather widget — reuse the PV array location
-WLAT = os.environ.get("PV_LAT", "49.44424")
-WLON = os.environ.get("PV_LON", "7.44393")
-WTZ = os.environ.get("PV_TZ", "Europe/Berlin")
+WLAT = os.environ.get("PV_LAT")                    # required — validated below
+WLON = os.environ.get("PV_LON")                    # required — validated below
+WTZ = os.environ.get("PV_TZ", "UTC")
 CONTROLLER_STATUS_URL = os.environ.get(
-    "CONTROLLER_STATUS_URL", "http://surplus-controller.energy.svc.cluster.local:9124/status")
-DB = dict(host=os.environ.get("DB_HOST", "timescaledb.energy.svc.cluster.local"),
+    "CONTROLLER_STATUS_URL", "http://surplus-controller:9124/status")
+DB = dict(host=os.environ.get("DB_HOST", "timescaledb"),
           port=int(os.environ.get("DB_PORT", "5432")), db=os.environ.get("DB_NAME", "energy"),
-          user=os.environ["DB_USER"], password=os.environ["DB_PASS"])
+          user=os.environ.get("DB_USER"), password=os.environ.get("DB_PASS"))
+
+REQUIRED_ENV = ("PV_LAT", "PV_LON", "DB_USER", "DB_PASS")
+
+
+def validate_env():
+    """Fail fast with one clear message instead of half-starting against nothing."""
+    missing = [n for n in REQUIRED_ENV if not os.environ.get(n)]
+    if missing:
+        raise SystemExit("control-ui: missing required environment variables: "
+                         + ", ".join(missing))
+
+
+validate_env()
 
 # HTTP Basic gate, FAIL-CLOSED: this UI drives real hardware, so a missing/misconfigured
 # ADMIN_PASS must lock the UI down (503), never silently open it. With ADMIN_PASS set the

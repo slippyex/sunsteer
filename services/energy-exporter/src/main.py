@@ -17,9 +17,9 @@ from . import tsdb_writer
 MCAST_GRP = "239.12.255.254"
 MCAST_PORT = 9522
 
-SHM_FILTER = os.environ.get("SHM_HOST", "192.168.2.44")
-SHELLY_URL = os.environ.get("SHELLY_URL", "http://192.168.2.90")
-INVERTER_HOST = os.environ.get("INVERTER_HOST", "192.168.2.68")
+SHM_FILTER = os.environ.get("SHM_HOST")            # required — validated in main()
+SHELLY_URL = os.environ.get("SHELLY_URL")          # required — validated in main()
+INVERTER_HOST = os.environ.get("INVERTER_HOST", "")  # empty = inverter telemetry disabled
 INVERTER_PORT = int(os.environ.get("INVERTER_PORT", "502"))
 INVERTER_UNIT = int(os.environ.get("INVERTER_UNIT_ID", "3"))
 METRICS_PORT = int(os.environ.get("METRICS_PORT", "9120"))
@@ -27,6 +27,17 @@ STATE_PORT = int(os.environ.get("STATE_PORT", "9121"))
 SHELLY_POLL_S = int(os.environ.get("SHELLY_POLL_SECONDS", "10"))
 INVERTER_POLL_S = int(os.environ.get("INVERTER_POLL_SECONDS", "10"))
 FLUSH_S = int(os.environ.get("TSDB_FLUSH_SECONDS", "60"))
+
+REQUIRED_ENV = ("SHM_HOST", "SHELLY_URL", "DB_HOST", "DB_NAME", "DB_USER", "DB_PASS")
+
+
+def validate_env():
+    """Fail fast with one clear message instead of half-starting against nothing."""
+    missing = [n for n in REQUIRED_ENV if not os.environ.get(n)]
+    if missing:
+        raise SystemExit("energy-exporter: missing required environment variables: "
+                         + ", ".join(missing))
+
 
 _buf = []
 _buf_lock = threading.Lock()
@@ -104,6 +115,7 @@ def tsdb_flusher(connect_fn):
 
 
 def main():
+    validate_env()
     start_http_server(METRICS_PORT)
     def db_connect():
         return tsdb_writer.connect(
@@ -112,7 +124,8 @@ def main():
     threading.Thread(target=state_server.serve, args=(STATE_PORT,), daemon=True).start()
     threading.Thread(target=shm_listener, daemon=True).start()
     threading.Thread(target=shelly_poller, daemon=True).start()
-    threading.Thread(target=inverter_poller, daemon=True).start()
+    if INVERTER_HOST:
+        threading.Thread(target=inverter_poller, daemon=True).start()
     threading.Thread(target=tsdb_flusher, args=(db_connect,), daemon=True).start()
     while True:
         time.sleep(3600)

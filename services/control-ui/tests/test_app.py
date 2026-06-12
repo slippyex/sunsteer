@@ -1,6 +1,4 @@
 import base64
-import os
-os.environ.setdefault("DB_USER", "x"); os.environ.setdefault("DB_PASS", "x")
 import pytest
 import src.sources as sources
 import src.app as appmod
@@ -33,13 +31,13 @@ def _patch(monkeypatch):
 def test_index_renders(monkeypatch):
     _patch(monkeypatch)
     monkeypatch.setattr(appmod, "_db", lambda: type("C", (), {"close": lambda self: None})())
-    r = TestClient(appmod.app).get("/")
+    r = TestClient(appmod.app).get("/?lang=de")
     assert r.status_code == 200
     assert "PV-Überschuss-Steuerung" in r.text
 
 def test_status_partial_renders(monkeypatch):
     _patch(monkeypatch)
-    r = TestClient(appmod.app).get("/partials/status")
+    r = TestClient(appmod.app).get("/partials/status?lang=de")
     assert r.status_code == 200
     assert "Überschuss" in r.text
 
@@ -111,7 +109,7 @@ def test_why_partial_renders(monkeypatch):
         "on_streak": 2, "off_streak": 0, "on_delay_cycles": 3, "off_delay_cycles": 3,
         "secs_since_on": 9999, "secs_since_off": 9999, "min_runtime_s": 1800,
         "min_offtime_s": 900, "reason": "waiting_surplus"})
-    r = TestClient(appmod.app).get("/partials/why")
+    r = TestClient(appmod.app).get("/partials/why?lang=de")
     assert r.status_code == 200 and "WP aus" in r.text
 
 def test_balance_partial_renders(monkeypatch):
@@ -120,7 +118,7 @@ def test_balance_partial_renders(monkeypatch):
     monkeypatch.setattr(appmod.sources, "today_summary", lambda c: {
         "prod_kwh": 38.0, "export_kwh": 31.0, "import_kwh": 4.0, "self_consumption": 0.18,
         "wp_runtime_h": 1.4, "wp_runtime_total_h": 5.0})
-    r = TestClient(appmod.app).get("/partials/balance")
+    r = TestClient(appmod.app).get("/partials/balance?lang=de")
     # nominal 2000 W × 1.4 h = 2.8 kWh today, × 5.0 h = 10.0 kWh total (estimated)
     assert r.status_code == 200 and "selbst genutzt" in r.text
     assert "2.8" in r.text and "10.0" in r.text
@@ -129,7 +127,7 @@ def test_balance_partial_renders(monkeypatch):
 def test_vicare_partial_renders(monkeypatch):
     _patch(monkeypatch)
     monkeypatch.setattr(appmod.sources, "prom_query", lambda *a, **k: 42.0)
-    r = TestClient(appmod.app).get("/partials/vicare")
+    r = TestClient(appmod.app).get("/partials/vicare?lang=de")
     assert r.status_code == 200
     assert "SCOP" in r.text and "Verdichter" in r.text
 
@@ -143,7 +141,7 @@ def test_vicare_partial_tolerates_missing_metrics(monkeypatch):
 
 def test_inverter_partial_renders(monkeypatch):
     _patch(monkeypatch)  # prom_query -> 1000.0 for all metrics
-    r = TestClient(appmod.app).get("/partials/inverter")
+    r = TestClient(appmod.app).get("/partials/inverter?lang=de")
     assert r.status_code == 200
     assert "Ost" in r.text and "West" in r.text and "Isolation" in r.text
 
@@ -158,7 +156,7 @@ def test_ticker_partial_renders(monkeypatch):
     _patch(monkeypatch)
     monkeypatch.setattr(appmod.sources, "controller_status",
                         lambda url: {"relay_on": True, "mode": "auto"})
-    r = TestClient(appmod.app).get("/partials/ticker")
+    r = TestClient(appmod.app).get("/partials/ticker?lang=de")
     assert r.status_code == 200 and "WP läuft" in r.text
 
 def test_ticker_partial_tolerates_no_controller(monkeypatch):
@@ -171,7 +169,7 @@ def test_ticker_partial_tolerates_no_controller(monkeypatch):
 def test_decisions_partial_renders(monkeypatch):
     _patch(monkeypatch)
     monkeypatch.setattr(appmod, "_db", lambda: type("C", (), {"close": lambda self: None})())
-    r = TestClient(appmod.app).get("/partials/decisions")
+    r = TestClient(appmod.app).get("/partials/decisions?lang=de")
     assert r.status_code == 200 and "Überschuss" in r.text
 
 def test_decisions_partial_handles_external_change_with_nulls(monkeypatch):
@@ -182,7 +180,7 @@ def test_decisions_partial_handles_external_change_with_nulls(monkeypatch):
     monkeypatch.setattr(appmod.sources, "recent_decisions", lambda c, limit=30: [
         {"time": datetime(2026, 6, 9, 20, 27), "mode": "auto", "surplus_w": None,
          "threshold_w": None, "action": "switched_off", "reason": "extern (Watchdog/SMA)"}])
-    r = TestClient(appmod.app).get("/partials/decisions")
+    r = TestClient(appmod.app).get("/partials/decisions?lang=de")
     assert r.status_code == 200 and "AUS" in r.text and "extern" in r.text  # no crash on None
 
 
@@ -219,7 +217,7 @@ def test_lang_endpoint_sets_cookie_and_redirects(monkeypatch):
 def test_lang_endpoint_rejects_unknown(monkeypatch):
     _patch(monkeypatch)
     r = TestClient(appmod.app).get("/lang/xx", follow_redirects=False)
-    assert "lang=de" in r.headers.get("set-cookie", "")   # fallback to default
+    assert "lang=en" in r.headers.get("set-cookie", "")   # fallback to default
 
 def test_status_partial_renders_english(monkeypatch):
     _patch(monkeypatch)
@@ -229,9 +227,14 @@ def test_status_partial_renders_english(monkeypatch):
     assert r.status_code == 200
     assert "Surplus" in r.text and "Überschuss" not in r.text
 
-def test_status_partial_defaults_german(monkeypatch):
+def test_status_partial_defaults_english(monkeypatch):
     _patch(monkeypatch)
     r = TestClient(appmod.app).get("/partials/status")
+    assert "Surplus" in r.text and "Überschuss" not in r.text
+
+def test_status_partial_german_via_query(monkeypatch):
+    _patch(monkeypatch)
+    r = TestClient(appmod.app).get("/partials/status?lang=de")
     assert "Überschuss" in r.text
 
 def test_decisions_reason_translated(monkeypatch):
