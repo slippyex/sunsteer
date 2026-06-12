@@ -1,24 +1,123 @@
 # Sunsteer
 
+[![ci](https://github.com/slippyex/sunsteer/actions/workflows/ci.yml/badge.svg)](https://github.com/slippyex/sunsteer/actions/workflows/ci.yml)
+[![release](https://img.shields.io/github/v/release/slippyex/sunsteer?include_prereleases&sort=semver)](https://github.com/slippyex/sunsteer/releases)
+[![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **Local SG-Ready heat-pump control from PV surplus.**
 
 Sunsteer reads your grid meter, decides when genuine PV surplus is available, and
 switches your heat pump's SG-Ready input through a local relay — no cloud, fully
-observable, with a web UI that explains every decision.
+observable, with a web UI that explains every single decision.
 
-> ⚠️ **Status: extraction in progress.** This repository is being extracted from a
-> private homelab setup. It is not yet ready for general use — configuration still
-> contains environment-specific defaults. Watch the releases for `v0.1.0`.
+It exists because the vendor cloud couldn't switch a relay. The full story:
+[*The Relay the Cloud Couldn't Switch*](https://medium.com/@mvelten773/the-relay-the-cloud-couldnt-switch-c6eac9dab196).
 
-## Services
+## Try it in two minutes — no hardware needed
 
-| Service | Purpose |
+```bash
+git clone https://github.com/slippyex/sunsteer.git
+cd sunsteer/deploy/compose
+docker compose -f docker-compose.demo.yml up -d
+```
+
+Open **http://localhost:8080** (login `admin` / `sunsteer`). A synthetic PV "day"
+passes every 10 minutes; switch the mode to **auto** in the settings to watch the
+controller decide in real time. Tear down with `docker compose -f docker-compose.demo.yml down -v`.
+
+## Features
+
+- **Adaptive threshold** — the ON threshold scales with the remaining PV forecast for
+  the day (Open-Meteo GTI per roof plane, forecast.solar fallback), so cloudy days
+  still harvest surplus instead of waiting for a peak that never comes.
+- **Self-calibrating** — the forecast's performance ratio is recalibrated daily from
+  your actual production. No manual tuning drift.
+- **Hysteresis done right** — ON/OFF streak requirements, minimum runtimes and
+  off-times protect the compressor; no relay flapping on passing clouds.
+- **Fail-safe by design** — stale meter data switches the heat pump OFF; a hardware
+  auto-off watchdog on the relay catches a dead controller; the web UI is
+  fail-closed behind HTTP Basic auth. See [docs/architecture.md](docs/architecture.md).
+- **Explainable** — every decision lands in a decision log with its reason; the UI's
+  "why" card explains in plain language (English/German) what the controller is
+  waiting for right now.
+- **Runtime tuning in the UI** — thresholds, delays, runtimes and prices live in the
+  database and hot-reload every control cycle. Static hardware config stays in `.env`.
+- **Observable** — Prometheus metrics from every service, optional Grafana add-on,
+  English alert rules included.
+
+## Run it for real
+
+You need: a grid meter the exporter can read (currently **SMA Sunny Home Manager 2.0**),
+a **Shelly Gen2 relay** (e.g. Pro 1PM) wired to the heat pump's SG-Ready input, and a
+Linux host with Docker on the same network. Wiring belongs in the hands of a licensed
+electrician — read [DISCLAIMER.md](DISCLAIMER.md) first.
+
+```bash
+cd deploy/compose
+cp .env.example .env     # fill in the marked REQUIRED values
+docker compose up -d     # pulls released images from GHCR
+```
+
+Step-by-step instructions: [docs/setup.md](docs/setup.md) ·
+Supported devices and wiring notes: [docs/hardware.md](docs/hardware.md)
+
+Released images (multi-arch, `linux/amd64` + `linux/arm64` — Raspberry Pi works):
+
+| Image | Purpose |
 |---|---|
-| `services/energy-exporter` | Reads SMA Sunny Home Manager 2.0 (Speedwire multicast), Shelly relay state, and optional SMA inverter telemetry (Modbus); serves `/state` and Prometheus `/metrics`; writes to TimescaleDB |
-| `services/surplus-controller` | The control loop: adaptive threshold from PV forecast, hysteresis, min-runtime/offtime, fail-safe OFF on stale data; switches the Shelly |
-| `services/control-ui` | FastAPI web UI (EN/DE): live status, decision log with explanations, history charts, settings |
-| `services/vicare-exporter` | Optional: Viessmann ViCare telemetry (temperatures, compressor, energy counters) |
+| `ghcr.io/slippyex/sunsteer/energy-exporter` | Meter readings (Speedwire multicast or mock), relay state, optional inverter telemetry; serves `/state` + `/metrics`; writes TimescaleDB |
+| `ghcr.io/slippyex/sunsteer/surplus-controller` | The control loop: adaptive threshold → hysteresis → switch the relay; fail-safe OFF on stale data |
+| `ghcr.io/slippyex/sunsteer/control-ui` | Web UI (EN/DE): live status, decision log with explanations, history charts, settings |
+| `ghcr.io/slippyex/sunsteer/vicare-exporter` | Optional: Viessmann ViCare telemetry (temperatures, compressor, energy counters) |
+
+## Architecture
+
+```mermaid
+flowchart LR
+  subgraph MEASURE
+    SHM[SMA Home Manager 2.0<br/>Speedwire multicast] --> EXP[energy-exporter]
+    SHELLY[Shelly Gen2 relay] -->|state poll| EXP
+    INV[SMA inverter<br/>Modbus, optional] --> EXP
+  end
+  subgraph DECIDE
+    EXP -->|/state JSON| CTRL[surplus-controller]
+    OM[Open-Meteo GTI<br/>forecast.solar fallback] --> CTRL
+  end
+  subgraph ACT
+    CTRL -->|Switch.Set + auto-off watchdog| SHELLY
+    SHELLY -->|SG-Ready contact| HP[Heat pump]
+  end
+  EXP --> TSDB[(TimescaleDB)]
+  CTRL --> TSDB
+  TSDB --> UI[control-ui]
+  CTRL -->|/status| UI
+  VICARE[vicare-exporter<br/>optional] --> TSDB
+```
+
+Details, data flow and the fail-safe chain: [docs/architecture.md](docs/architecture.md)
+
+## Different hardware?
+
+The controller only consumes a small, versioned `/state` JSON — it does not care where
+the numbers come from. Two ways to bring your own meter:
+
+1. **In-tree driver:** implement the `GridMeter` protocol in
+   `services/energy-exporter/src/drivers/` (the built-in `mock` driver is the template).
+2. **Your own exporter:** serve the documented `/state` contract from any process —
+   see [docs/state-interface.md](docs/state-interface.md).
+
+Contributions welcome: [CONTRIBUTING.md](CONTRIBUTING.md)
+
+## Roadmap
+
+- More meter drivers (Shelly 3EM at the feed-in point, Tibber Pulse, P1/DSMR)
+- Kubernetes deployment examples (the reference install runs on K3s)
+- Grafana dashboard provisioning
+- More SG-Ready states than ON/OFF (e.g. recommendation vs. command)
+- MQTT / Home Assistant integration
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) — see [DISCLAIMER.md](DISCLAIMER.md) before wiring anything to a
+heating system. Sunsteer is a private project and is not affiliated with SMA,
+Shelly/Allterco, or Viessmann.

@@ -25,9 +25,13 @@ def set_shm(**kw):
         _shm_ts = time.time()
 
 
+SCHEMA_VERSION = 1   # bump on breaking /state changes; contract: docs/state-interface.md
+
+
 def _snapshot():
     with _lock:
         snap = dict(_latest)
+        snap["schema"] = SCHEMA_VERSION
         snap["shm_age_s"] = round(time.time() - _shm_ts, 1) if _shm_ts is not None else None
     return snap
 
