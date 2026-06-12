@@ -14,6 +14,10 @@ def test_snapshot_age_none_when_no_shm():
     assert snap["shelly_on"] is True
 
 
+def test_snapshot_carries_schema_version():
+    assert ss._snapshot()["schema"] == 1   # versioned contract, see docs/state-interface.md
+
+
 def test_set_shm_stamps_freshness(monkeypatch):
     t = [1000.0]
     monkeypatch.setattr(ss.time, "time", lambda: t[0])
