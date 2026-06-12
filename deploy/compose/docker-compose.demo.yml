@@ -1,0 +1,73 @@
+# Sunsteer ZERO-CONFIG DEMO — no hardware, no .env, one command:
+#
+#   docker compose -f docker-compose.demo.yml up -d --build
+#
+# Then open http://localhost:8080  (login: admin / sunsteer)
+# A synthetic PV "day" passes every 10 minutes. Switch the mode to "auto" in the
+# UI settings to watch the controller decide. Relay writes fail by design (the
+# Shelly URL points at an unroutable documentation address) — bring real hardware
+# and use docker-compose.yml for the real thing.
+
+services:
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    environment:
+      POSTGRES_USER: sunsteer
+      POSTGRES_PASSWORD: sunsteer
+      POSTGRES_DB: energy
+    volumes:
+      - demo-pgdata:/var/lib/postgresql/data
+      - ../../db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sunsteer -d energy"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  energy-exporter:
+    build: ../../services/energy-exporter
+    environment:
+      METER_DRIVER: mock
+      DB_HOST: timescaledb
+      DB_NAME: energy
+      DB_USER: sunsteer
+      DB_PASS: sunsteer
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+
+  surplus-controller:
+    build: ../../services/surplus-controller
+    environment:
+      EXPORTER_STATE_URL: http://energy-exporter:9121/state
+      SHELLY_URL: http://192.0.2.90        # TEST-NET: unreachable on purpose (demo has no relay)
+      PV_LAT: "52.52"
+      PV_LON: "13.41"
+      PV_PLANES: "[[30,0,5.0]]"
+      DB_HOST: timescaledb
+      DB_NAME: energy
+      DB_USER: sunsteer
+      DB_PASS: sunsteer
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+
+  control-ui:
+    build: ../../services/control-ui
+    environment:
+      PV_LAT: "52.52"
+      PV_LON: "13.41"
+      ADMIN_USER: admin
+      ADMIN_PASS: sunsteer
+      DB_HOST: timescaledb
+      DB_NAME: energy
+      DB_USER: sunsteer
+      DB_PASS: sunsteer
+    ports:
+      - "8080:8080"
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+
+volumes:
+  demo-pgdata:

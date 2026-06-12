@@ -1,0 +1,42 @@
+groups:
+  - name: sunsteer
+    rules:
+      - alert: MeterReadingsStale
+        expr: time() - sma_shm_last_telegram_timestamp_seconds > 120
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "No grid-meter readings for over 2 minutes"
+          description: "The controller is blind and fails safe (heat pump OFF). Check the meter/exporter (multicast reception, SHM_HOST filter)."
+
+      - alert: EnergyExporterDown
+        expr: up{job="energy-exporter"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "energy-exporter is not reachable"
+          description: "No metrics from the exporter. The controller will fail safe once its state view goes stale."
+
+      - alert: SurplusControllerDown
+        expr: up{job="surplus-controller"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "surplus-controller is not reachable"
+          description: "Nothing is steering the heat pump. The Shelly auto-off watchdog will switch the relay OFF on its own."
+
+      - alert: ControllerStateStale
+        expr: surplus_control_state_fresh == 0
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Controller has been running blind for 5 minutes"
+          description: "The control loop runs but its meter reading is stale — the fail-safe has switched the heat pump OFF."
+
+      - alert: HeatpumpRelayUnreachable
+        expr: shelly_reachable == 0
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "Shelly relay unreachable for 10 minutes"
+          description: "Polling the relay fails (WiFi dropouts?). Switching may be unreliable; the Shelly auto-off acts as the safety net."
