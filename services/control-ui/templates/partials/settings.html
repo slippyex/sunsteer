@@ -1,0 +1,93 @@
+{% set c = cfg if cfg is defined else None %}
+<form hx-post="/settings" hx-target="#settings" hx-swap="innerHTML"
+      class="grid md:grid-cols-3 gap-x-5 gap-y-4 text-sm font-sans mt-2">
+
+  {# ── Macro: single labeled input field ─────────────────────────── #}
+  {% macro field(name, label, value, suffix='', help='') %}
+    <label class="flex flex-col gap-1.5">
+      <span class="text-[10px] uppercase tracking-[0.13em] text-slate-400 flex items-center gap-1">{{ label }}{% if suffix %}<span class="text-slate-600 ml-1 normal-case tracking-normal">{{ suffix }}</span>{% endif %}{% if help %}<span class="text-slate-500 hover:text-sky-400 cursor-help normal-case tracking-normal" title="{{ help }}">ⓘ</span>{% endif %}</span>
+      <input
+        name="{{ name }}"
+        value="{{ (form[name] if form is defined and form else value) }}"
+        class="bg-slate-900/80 border border-slate-700/70 rounded-lg px-3 py-2
+               text-slate-100 font-mono text-sm
+               focus:outline-none focus:ring-2 focus:ring-sky-500/50 focus:border-sky-500/60
+               hover:border-slate-600 transition-colors duration-150 placeholder-slate-600"
+      >
+      {% if errors is defined and errors.get(name) %}
+        <span class="text-rose-400 text-xs mt-0.5">{{ errors[name] }}</span>
+      {% endif %}
+    </label>
+  {% endmacro %}
+
+  {# ── Threshold group ────────────────────────────────────────────── #}
+  {{ field('threshold_base_w', t('f_threshold_base'),  c.threshold_base_w if c else 2500, 'W',
+           help=t('h_threshold_base')) }}
+  {{ field('threshold_min_w',  t('f_threshold_min'),    c.threshold_min_w  if c else 1500, 'W',
+           help=t('h_threshold_min')) }}
+  {{ field('threshold_off_w',  t('f_threshold_off'),    c.threshold_off_w  if c else 200,  'W',
+           help=t('h_threshold_off')) }}
+
+  {# ── Timing group ───────────────────────────────────────────────── #}
+  {{ field('on_delay_cycles',  t('f_on_delay'),        c.on_delay_cycles  if c else 3,    t('cycles'),
+           help=t('h_on_delay')) }}
+  {{ field('off_delay_cycles', t('f_off_delay'),       c.off_delay_cycles if c else 3,    t('cycles'),
+           help=t('h_off_delay')) }}
+  {{ field('min_runtime_min',  t('f_min_runtime'), (c.min_runtime_s//60) if c else 30,'min',
+           help=t('h_min_runtime')) }}
+  {{ field('min_offtime_min',  t('f_min_offtime'),    (c.min_offtime_s//60) if c else 15,'min',
+           help=t('h_min_offtime')) }}
+
+  {# ── Tariff / reference group ────────────────────────────────────── #}
+  {{ field('full_sun_ref_kwh',       t('f_full_sun_ref'), c.full_sun_ref_kwh       if c else 40,   'kWh',
+           help=t('h_full_sun_ref')) }}
+  {{ field('feed_in_tariff_eur_kwh', t('f_feed_in'),          c.feed_in_tariff_eur_kwh if c else 0.08, '€/kWh',
+           help=t('h_feed_in')) }}
+  {{ field('grid_price_eur_kwh',     t('f_grid_price'),                c.grid_price_eur_kwh     if c else 0.30, '€/kWh',
+           help=t('h_grid_price')) }}
+  {{ field('wp_nominal_power_w',     t('f_wp_nominal'),      c.wp_nominal_power_w     if c else 2000, 'W',
+           help=t('h_wp_nominal')) }}
+
+  {# ── Adaptive toggle ─────────────────────────────────────────────── #}
+  <div class="flex items-center md:col-span-3">
+    <label class="flex items-center gap-3 cursor-pointer select-none group">
+      <div class="relative">
+        <input
+          type="checkbox"
+          name="adapt_enabled"
+          {% if (c.adapt_enabled if c else True) %}checked{% endif %}
+          class="sr-only peer"
+        >
+        {# Toggle track #}
+        <div class="w-10 h-5 bg-slate-700 rounded-full border border-slate-600
+                    peer-checked:bg-sky-600 peer-checked:border-sky-500
+                    transition-colors duration-200"></div>
+        {# Toggle thumb #}
+        <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-slate-300 rounded-full shadow
+                    peer-checked:translate-x-5 peer-checked:bg-white
+                    transition-transform duration-200"></div>
+      </div>
+      <span class="text-slate-300 text-sm">{{ t('adaptive_threshold') }}</span>
+      <span class="text-slate-500 hover:text-sky-400 cursor-help text-sm" title="{{ t('h_adaptive') }}">ⓘ</span>
+    </label>
+  </div>
+
+  {# ── Save bar ────────────────────────────────────────────────────── #}
+  <div class="md:col-span-3 flex items-center gap-4 pt-1">
+    <button
+      type="submit"
+      class="px-5 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-sm font-medium
+             shadow-lg shadow-sky-900/40 ring-1 ring-sky-500/50
+             transition-all duration-150 active:scale-95"
+    >{{ t('save') }}</button>
+    {% if saved is defined and saved %}
+      <span class="flex items-center gap-1.5 text-emerald-400 text-sm font-medium">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+        </svg>
+        {{ t('saved') }}
+      </span>
+    {% endif %}
+  </div>
+
+</form>

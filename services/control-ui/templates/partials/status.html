@@ -1,0 +1,70 @@
+{% set L = live %}
+{# ── Health bar ─────────────────────────────────────────────────── #}
+<div class="flex flex-wrap items-center gap-4 mb-5">
+  {% for key, name in [('shm','SHM'),('shelly','Shelly'),('wr','WR'),('controller','Controller')] %}
+    <span class="flex items-center gap-2 text-xs font-mono tracking-widest">
+      {% if L.health[key] %}
+        <span class="relative flex h-2 w-2">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60"></span>
+          <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+        </span>
+        <span class="text-emerald-400/80">{{ name }}</span>
+      {% else %}
+        <span class="relative flex h-2 w-2">
+          <span class="relative inline-flex rounded-full h-2 w-2 bg-rose-600"></span>
+        </span>
+        <span class="text-rose-400/80">{{ name }}</span>
+      {% endif %}
+    </span>
+  {% endfor %}
+</div>
+
+{# ── KPI cards ──────────────────────────────────────────────────── #}
+<div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+  {# Each tuple: label, value, unit, accent-color-class, border-top-class #}
+  {% for label, val, unit, val_cls, border_cls in [
+      (t('kpi_surplus'),     L.surplus,     'W', 'text-emerald-400', 'border-t-emerald-500'),
+      (t('kpi_production'),  L.production,  'W', 'text-sky-400',     'border-t-sky-500'),
+      (t('kpi_consumption'), L.consumption, 'W', 'text-slate-200',   'border-t-slate-500'),
+      (t('kpi_wp_power'),    L.wp_power,    'W', 'text-amber-400',   'border-t-amber-500'),
+  ] %}
+    <div class="relative bg-slate-800/80 rounded-xl border border-slate-700/60 border-t-2 {{ border_cls }}
+                shadow-lg shadow-black/30 px-4 py-4 flex flex-col gap-1 overflow-hidden">
+      {# subtle background glow #}
+      <div class="absolute inset-0 opacity-5 bg-gradient-to-br from-white to-transparent pointer-events-none rounded-xl"></div>
+      <span class="text-[10px] uppercase tracking-[0.14em] text-slate-400 font-sans">{{ label }}</span>
+      <span class="font-mono text-[1.75rem] leading-none font-semibold {{ val_cls }} tabular-nums">
+        {{ (val|round|int) if val is not none else '–' }}
+        <span class="text-sm font-normal text-slate-400 ml-0.5">{{ unit }}</span>
+      </span>
+    </div>
+  {% endfor %}
+</div>
+
+{# ── Secondary stats ────────────────────────────────────────────── #}
+<div class="flex flex-wrap gap-5 mt-4 text-sm font-sans text-slate-300">
+  <span class="flex items-center gap-2">
+    <span class="text-slate-500 text-xs uppercase tracking-widest">{{ t('relay') }}</span>
+    {% if L.relay == 1 %}
+      <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 text-xs font-mono">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>{{ t('on') }}
+      </span>
+    {% else %}
+      <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-700/60 border border-slate-600/40 text-slate-400 text-xs font-mono">
+        <span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>{{ t('off') }}
+      </span>
+    {% endif %}
+  </span>
+  <span class="flex items-center gap-2">
+    <span class="text-slate-500 text-xs uppercase tracking-widest">{{ t('threshold') }}</span>
+    <span class="font-mono font-semibold text-slate-200">{{ (L.threshold|round|int) if L.threshold is not none else '–' }} W</span>
+  </span>
+  <span class="flex items-center gap-2">
+    <span class="text-slate-500 text-xs uppercase tracking-widest">{{ t('self_consumption') }}</span>
+    <span class="font-mono font-semibold text-sky-300">{{ (L.self_consumption*100)|round|int if L.self_consumption is not none else '–' }}%</span>
+  </span>
+  <span class="flex items-center gap-2">
+    <span class="text-slate-500 text-xs uppercase tracking-widest">{{ t('autarky') }}</span>
+    <span class="font-mono font-semibold text-emerald-300">{{ (L.autarky*100)|round|int if L.autarky is not none else '–' }}%</span>
+  </span>
+</div>

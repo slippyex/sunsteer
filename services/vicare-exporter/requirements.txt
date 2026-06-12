@@ -1,0 +1,3 @@
+PyViCare==2.60.2
+prometheus_client==0.20.0
+psycopg2-binary==2.9.9
