@@ -1,54 +1,30 @@
-{% macro num(val, unit='', dp=1) -%}
-  {%- if val is not none -%}{{ val|round(dp) }}<span class="text-slate-500 text-xs ml-0.5">{{ unit }}</span>
-  {%- else -%}<span class="text-slate-600">&ndash;</span>{%- endif -%}
+{% macro val(v, unit='', dp=1) -%}
+  {%- if v is not none -%}{{ v|round(dp) }}<small> {{ unit }}</small>
+  {%- else -%}&ndash;{%- endif -%}
 {%- endmacro %}
 
-{% if v.reachable == 0 %}
-  <div class="text-xs text-slate-500 font-sans">{{ t('inv_unreachable') }}</div>
-{% else %}
-{# ── AC + per-string DC + temperature ──────────────────────────── #}
-<div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-  <div class="bg-slate-800/60 rounded-xl border border-slate-700/60 border-t-2 border-t-emerald-500/70 px-3 py-3 flex flex-col gap-0.5">
-    <span class="text-[10px] uppercase tracking-[0.14em] text-slate-400">{{ t('ac_power') }}</span>
-    <span class="font-mono text-xl font-semibold text-emerald-300 tabular-nums">{{ num(v.ac_power, 'W', 0) }}</span>
-  </div>
-  <div class="bg-slate-800/60 rounded-xl border border-slate-700/60 border-t-2 border-t-amber-500/70 px-3 py-3 flex flex-col gap-0.5">
-    <span class="text-[10px] uppercase tracking-[0.14em] text-slate-400">{{ t('east') }} <span class="text-slate-600">· A</span></span>
-    <span class="font-mono text-xl font-semibold text-amber-300 tabular-nums">{{ num(v.dc_power_a, 'W', 0) }}</span>
-    <span class="text-[10px] text-slate-500 font-mono">{{ num(v.dc_v_a, 'V', 0) }} · {{ num(v.dc_i_a, 'A', 1) }}</span>
-  </div>
-  <div class="bg-slate-800/60 rounded-xl border border-slate-700/60 border-t-2 border-t-sky-500/70 px-3 py-3 flex flex-col gap-0.5">
-    <span class="text-[10px] uppercase tracking-[0.14em] text-slate-400">{{ t('west') }} <span class="text-slate-600">· B</span></span>
-    <span class="font-mono text-xl font-semibold text-sky-300 tabular-nums">{{ num(v.dc_power_b, 'W', 0) }}</span>
-    <span class="text-[10px] text-slate-500 font-mono">{{ num(v.dc_v_b, 'V', 0) }} · {{ num(v.dc_i_b, 'A', 1) }}</span>
-  </div>
-  <div class="bg-slate-800/60 rounded-xl border border-slate-700/60 border-t-2 border-t-rose-500/70 px-3 py-3 flex flex-col gap-0.5">
-    <span class="text-[10px] uppercase tracking-[0.14em] text-slate-400">{{ t('device_temp') }}</span>
-    <span class="font-mono text-xl font-semibold text-rose-300 tabular-nums">{{ num(v.temp, '°C') }}</span>
+<div class="panel">
+  <h2>{{ t('sec_inverter') }} <span class="tag {{ 'txt-g' if v.state_ok else 'txt-a' }}">● {{ v.state_text }}</span></h2>
+  <div class="pbody">
+    {% if v.reachable == 0 %}
+    <div class="lbl">{{ t('inv_unreachable') }}</div>
+    {% else %}
+    <div class="num">
+      {%- if v.ac_power is not none -%}{{ v.ac_power|round(0)|int }}<small> W</small>{%- else -%}&ndash;{%- endif -%}
+    </div>
+    <div class="lbl">{{ t('ac_power') }}</div>
+    <div class="row2">
+      <span>{{ t('east') }} <b>{{ val(v.dc_power_a, 'W', 0) }}</b></span>
+      <span>{{ t('west') }} <b>{{ val(v.dc_power_b, 'W', 0) }}</b></span>
+    </div>
+    <div class="row2">
+      <span>{{ t('device_temp') }} <b>{{ val(v.temp, '°C', 1) }}</b></span>
+      <span title="{{ t('insulation_tip') }}">{{ t('insulation') }} <b>{{ val(v.riso_kohm, 'kΩ', 0) }}</b></span>
+    </div>
+    <div class="row2">
+      <span title="{{ t('grid_v_tip') }}">L1–L3 <b>{{ val(v.ac_v_l1, 'V', 0) }}</b></span>
+      <span>{{ t('frequency') }} <b>{{ val(v.grid_freq, 'Hz', 2) }}</b></span>
+    </div>
+    {% endif %}
   </div>
 </div>
-
-{# ── Health + grid ─────────────────────────────────────────────── #}
-<div class="flex flex-wrap gap-x-5 gap-y-2 mt-4 text-sm font-sans text-slate-300">
-  <span class="flex items-center gap-2">
-    <span class="text-slate-500 text-xs uppercase tracking-widest">{{ t('inv_status') }}</span>
-    <span class="font-mono font-semibold {{ 'text-emerald-400' if v.state_ok else 'text-amber-400' }}">{{ v.state_text }}</span>
-  </span>
-  <span class="flex items-center gap-2" title="{{ t('insulation_tip') }}">
-    <span class="text-slate-500 text-xs uppercase tracking-widest">{{ t('insulation') }}</span>
-    <span class="font-mono text-slate-200">{{ num(v.riso_kohm, 'kΩ', 0) }}</span>
-  </span>
-  <span class="text-slate-700 select-none">·</span>
-  <span class="flex items-center gap-2" title="{{ t('grid_v_tip') }}">
-    <span class="text-slate-500 text-xs uppercase tracking-widest">{{ t('grid_v') }}</span>
-    <span class="font-mono text-slate-300">{{ num(v.ac_v_l1, '', 0) }} · {{ num(v.ac_v_l2, '', 0) }} · {{ num(v.ac_v_l3, 'V', 0) }}</span>
-  </span>
-  <span class="flex items-center gap-2">
-    <span class="text-slate-500 text-xs uppercase tracking-widest">{{ t('frequency') }}</span>
-    <span class="font-mono text-slate-300">{{ num(v.grid_freq, 'Hz', 2) }}</span>
-  </span>
-</div>
-<div class="mt-2 text-[10px] font-sans text-slate-600">
-  {{ t('inv_note') }}
-</div>
-{% endif %}

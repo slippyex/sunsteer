@@ -4,6 +4,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY src/ ./src/
 COPY templates/ ./templates/
+COPY static/ ./static/
 
 # test stage — `docker build --target test` runs the unit tests; build fails if they fail
 FROM base AS test

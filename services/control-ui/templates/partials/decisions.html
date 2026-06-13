@@ -1,40 +1,28 @@
-<table class="w-full text-sm min-w-[560px]">
-  <thead class="sticky top-0 bg-slate-800 z-10">
-    <tr class="text-[10px] uppercase tracking-[0.12em] text-slate-500 border-b border-slate-700/80">
-      <th class="pb-2 text-left font-medium pr-4">{{ t('col_time') }}</th>
-      <th class="pb-2 text-left font-medium pr-4">{{ t('col_mode') }}</th>
-      <th class="pb-2 text-right font-medium pr-4">{{ t('kpi_surplus') }}</th>
-      <th class="pb-2 text-right font-medium pr-4">{{ t('threshold') }}</th>
-      <th class="pb-2 text-left font-medium pr-4">{{ t('col_action') }}</th>
-      <th class="pb-2 text-left font-medium">{{ t('col_reason') }}</th>
+<table class="log">
+  <thead>
+    <tr>
+      <td class="t">{{ t('col_time') }}</td>
+      <td>{{ t('col_action') }}</td>
+      <td>{{ t('col_mode') }}</td>
+      <td class="r">{{ t('col_reason') }}</td>
+      <td style="text-align:right;">{{ t('kpi_surplus') }}</td>
+      <td style="text-align:right;">{{ t('threshold') }}</td>
     </tr>
   </thead>
-  <tbody class="divide-y divide-slate-700/40">
+  <tbody>
   {% for d in decisions %}
-    <tr class="hover:bg-slate-700/25 transition-colors duration-100 group">
-      <td class="py-2 pr-4 font-mono text-xs text-slate-400 whitespace-nowrap">{{ d.time | localtime }}</td>
-      <td class="py-2 pr-4 font-mono text-xs text-slate-300 whitespace-nowrap">{{ d.mode }}</td>
-      <td class="py-2 pr-4 font-mono text-xs text-right whitespace-nowrap">
-        {% if d.surplus_w is not none %}
-          <span class="{% if d.surplus_w > 0 %}text-emerald-400{% else %}text-rose-400{% endif %}">{{ d.surplus_w|round|int }} W</span>
-        {% else %}<span class="text-slate-600">–</span>{% endif %}
-      </td>
-      <td class="py-2 pr-4 font-mono text-xs text-slate-300 text-right whitespace-nowrap">
-        {% if d.threshold_w is not none %}{{ d.threshold_w|round|int }} W{% else %}<span class="text-slate-600">–</span>{% endif %}
-      </td>
-      <td class="py-2 pr-4">
-        {% if d.action == 'switched_on' %}
-          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/12 border border-emerald-500/30 text-emerald-400 text-xs font-mono">
-            <span class="w-1 h-1 rounded-full bg-emerald-400"></span>{{ t('on') }}
-          </span>
-        {% else %}
-          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-700/60 border border-slate-600/40 text-amber-400/80 text-xs font-mono">
-            <span class="w-1 h-1 rounded-full bg-amber-500/80"></span>{{ t('off') }}
-          </span>
-        {% endif %}
-      </td>
-      <td class="py-2 text-xs text-slate-500 max-w-[220px] truncate group-hover:text-slate-400 transition-colors">{{ t('reason_' ~ d.reason, default=d.reason) }}</td>
-    </tr>
+  <tr>
+    <td class="t">{{ d.time | localtime }}</td>
+    <td class="{{ 'on-t' if d.action == 'switched_on' else 'off-t' }}">{{ t('on') if d.action == 'switched_on' else t('off') }}</td>
+    <td>{{ d.mode }}</td>
+    <td class="r">{{ t('reason_' ~ d.reason, default=d.reason) }}</td>
+    <td style="text-align:right;" class="{{ 'txt-dim' if d.surplus_w is none }}">
+      {%- if d.surplus_w is not none -%}{{ d.surplus_w|round|int }} W{%- else -%}–{%- endif -%}
+    </td>
+    <td style="text-align:right;" class="{{ 'txt-dim' if d.threshold_w is none }}">
+      {%- if d.threshold_w is not none -%}{{ d.threshold_w|round|int }} W{%- else -%}–{%- endif -%}
+    </td>
+  </tr>
   {% endfor %}
   </tbody>
 </table>
