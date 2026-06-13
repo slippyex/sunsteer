@@ -1,18 +1,6 @@
 {% set tk = ticker %}
-<div class="max-w-6xl mx-auto px-4 md:px-6 py-2 flex items-center gap-2.5 text-xs font-mono">
-  {% if tk.relay_on %}
-    <span class="relative flex h-2 w-2"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-50"></span><span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span></span>
-    <span class="text-emerald-400/90 font-semibold">{{ t('why_on') }}</span>
-  {% elif tk.relay_on is sameas false %}
-    <span class="inline-flex rounded-full h-2 w-2 bg-slate-500"></span>
-    <span class="text-slate-400">{{ t('why_off') }}</span>
-  {% else %}
-    <span class="inline-flex rounded-full h-2 w-2 bg-slate-600"></span>
-    <span class="text-slate-500">{{ t('ticker_unknown') }}</span>
-  {% endif %}
-  <span class="text-slate-700 select-none">·</span>
-  <span class="text-slate-300">{{ t('kpi_surplus') }} <span class="tabular-nums {{ 'text-emerald-300' if (tk.surplus_w or 0) >= 0 else 'text-rose-300' }}">{{ tk.surplus_w if tk.surplus_w is not none else '–' }}</span><span class="text-slate-500"> W</span></span>
-  <span class="text-slate-700 select-none hidden sm:inline">·</span>
-  <span class="hidden sm:inline uppercase tracking-widest text-[10px]
-    {{ 'text-emerald-400/70' if tk.mode=='auto' else 'text-amber-400/70' if tk.mode=='manual' else 'text-rose-400/70' if tk.mode=='paused' else 'text-slate-500' }}">{{ tk.mode or '–' }}</span>
-</div>
+{% if tk.relay_on %}<span class="led ledon"></span><span class="txt-g">{{ t('why_on') }}</span>
+{% elif tk.relay_on is sameas false %}<span class="led off"></span><span class="txt-dim">{{ t('why_off') }}</span>
+{% else %}<span class="led off"></span><span class="txt-dim">{{ t('ticker_unknown') }}</span>{% endif %}
+<span class="txt-c">{{ tk.surplus_w if tk.surplus_w is not none else '–' }} W</span>
+<span class="{{ 'txt-g' if tk.mode=='auto' else 'txt-a' if tk.mode=='manual' else 'txt-r' if tk.mode=='paused' else 'txt-dim' }}">{{ (tk.mode or '–')|upper }}</span>

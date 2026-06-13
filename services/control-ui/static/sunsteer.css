@@ -1,0 +1,183 @@
+/* ============================================================
+   sunsteer.css — Ops-Center design system
+   Order: 1) @font-face, 2) :root + mockup rules, 3) additions
+   ============================================================ */
+
+/* ── 1. Fonts (latin subset, self-hosted) ── */
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(vendor/fonts/ibm-plex-mono-400.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(vendor/fonts/ibm-plex-mono-500.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(vendor/fonts/ibm-plex-mono-600.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(vendor/fonts/ibm-plex-sans-400.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(vendor/fonts/ibm-plex-sans-500.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(vendor/fonts/ibm-plex-sans-600.woff2) format('woff2');
+}
+
+/* ── 2. Design tokens + mockup rules (verbatim from sunsteer-ops-center.html) ── */
+:root {
+  --bg:#0e1114; --panel:#14181c; --panel2:#181d22; --line:#2a3138;
+  --txt:#c8d2da; --dim:#5a6670; --mute:#8b97a1;
+  --cyan:#5fd4e8; --cyandk:#1b6e80; --green:#46e07c; --amber:#ffb648; --red:#ff6b5e;
+  --mono:'IBM Plex Mono',monospace; --sans:'IBM Plex Sans',sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:13px;padding-bottom:30px;}
+.topbar{position:sticky;top:0;z-index:10;display:flex;justify-content:space-between;align-items:center;
+        padding:8px 16px;border-bottom:1px solid var(--line);background:var(--panel);}
+.brand{font-family:var(--mono);font-weight:600;letter-spacing:3px;color:var(--cyan);font-size:13px;}
+.brand .sub{color:var(--dim);letter-spacing:1px;font-weight:400;font-size:10px;margin-left:10px;}
+.topbar .right{font-family:var(--mono);font-size:11px;color:var(--mute);display:flex;gap:16px;align-items:center;}
+.led{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);
+     box-shadow:0 0 8px rgba(70,224,124,.8);margin-right:6px;vertical-align:1px;}
+.led.off{background:var(--dim);box-shadow:none;}
+.lang a{color:var(--dim);text-decoration:none;} .lang a.on{color:var(--cyan);}
+.cockpit{display:grid;grid-template-columns:290px 1fr;gap:10px;padding:10px 16px;max-width:1500px;margin:0 auto;}
+.panel{background:var(--panel);border:1px solid var(--line);}
+.panel h2{font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:2px;color:var(--mute);
+          padding:7px 10px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;}
+.panel h2 .tag{color:var(--dim);letter-spacing:1px;}
+.pbody{padding:10px;}
+.live{display:flex;flex-direction:column;gap:10px;}
+.bigval{font-family:var(--mono);font-weight:600;font-size:42px;color:var(--cyan);
+        text-shadow:0 0 18px rgba(95,212,232,.25);line-height:1;}
+.bigval .unit{font-size:18px;color:var(--dim);font-weight:400;}
+.why{border-left:3px solid var(--amber);background:var(--panel2);padding:8px 10px;font-size:12px;line-height:1.5;}
+.why b{color:var(--amber);}
+.gauge{height:10px;background:var(--bg);border:1px solid var(--line);margin:10px 0 4px;}
+.gauge i{display:block;height:100%;width:56%;background:linear-gradient(90deg,var(--cyandk),var(--cyan));}
+.kv{font-family:var(--mono);font-size:11px;line-height:2.0;color:var(--mute);}
+.kv b{color:var(--txt);font-weight:500;float:right;}
+.kv .g{color:var(--green);} .kv .a{color:var(--amber);} .kv .c{color:var(--cyan);}
+.modes{display:flex;gap:6px;margin-top:8px;}
+.modes button,.winbtn{font-family:var(--mono);font-size:10px;letter-spacing:1px;padding:6px 8px;
+              background:var(--panel2);color:var(--mute);border:1px solid var(--line);cursor:pointer;}
+.modes button{flex:1;padding:7px 0;}
+.modes button.on,.winbtn.on{background:rgba(95,212,232,.12);color:var(--cyan);border-color:var(--cyandk);}
+.modes button.warn{color:var(--red);}
+.main{display:flex;flex-direction:column;gap:10px;min-width:0;}
+.chart{position:relative;}
+.chart svg{display:block;width:100%;}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
+.grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
+.num{font-family:var(--mono);font-size:20px;font-weight:600;color:var(--txt);}
+.num small{font-size:11px;color:var(--dim);font-weight:400;}
+.lbl{font-size:10px;letter-spacing:1px;color:var(--dim);font-family:var(--mono);margin-top:2px;}
+.row2{display:flex;justify-content:space-between;margin-top:7px;font-family:var(--mono);font-size:11px;color:var(--mute);}
+.row2 b{color:var(--txt);font-weight:500;}
+table.log{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px;}
+table.log td{padding:5px 10px;border-bottom:1px solid var(--line);color:var(--mute);}
+table.log tr:last-child td{border-bottom:none;}
+table.log td.t{color:var(--dim);width:110px;}
+.on-t{color:var(--green);font-weight:600;} .off-t{color:var(--amber);font-weight:600;}
+table.log td.r{color:var(--txt);}
+.note{font-family:var(--mono);font-size:10px;color:var(--amber);opacity:.8;}
+details.hist summary{cursor:pointer;list-style:none;font-family:var(--mono);font-size:10px;letter-spacing:2px;
+          color:var(--mute);padding:7px 10px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;}
+details.hist summary::before{content:"▸ ";color:var(--cyan);}
+details.hist[open] summary::before{content:"▾ ";}
+.minichart{border:1px solid var(--line);background:var(--panel2);}
+.minichart .ttl{font-family:var(--mono);font-size:9px;letter-spacing:1px;color:var(--dim);padding:5px 8px;display:flex;justify-content:space-between;}
+.f{display:grid;grid-template-columns:1fr 110px;gap:6px 10px;align-items:center;font-family:var(--mono);font-size:11px;color:var(--mute);padding:4px 0;}
+.f input{background:var(--bg);border:1px solid var(--line);color:var(--cyan);font-family:var(--mono);font-size:11px;padding:4px 6px;text-align:right;}
+.f .h{grid-column:1/-1;font-size:9px;color:var(--dim);margin:-4px 0 2px;}
+.sbtn{font-family:var(--mono);font-size:10px;letter-spacing:1px;padding:8px 18px;background:rgba(95,212,232,.12);
+      color:var(--cyan);border:1px solid var(--cyandk);cursor:pointer;}
+/* ── 3. Additions (non-media; media queries follow in section 4) ── */
+
+/* settings modal (replaces the mockup's inline .ovl demo) */
+.modal-back { position:fixed; inset:0; background:rgba(8,10,12,.75); z-index:50;
+  display:none; align-items:flex-start; justify-content:center; padding:6vh 16px; }
+.modal-back.open { display:flex; }
+.modal { width:100%; max-width:560px; background:var(--panel); border:1px solid var(--cyandk);
+  box-shadow:0 0 40px rgba(95,212,232,.12); max-height:85vh; overflow-y:auto; }
+
+/* text utilities used by partials */
+.txt-c{color:var(--cyan);} .txt-g{color:var(--green);} .txt-a{color:var(--amber);}
+.txt-r{color:var(--red);} .txt-dim{color:var(--dim);}
+
+/* topbar LED variants */
+.led.ledon { background:var(--green); box-shadow:0 0 8px rgba(70,224,124,.8); }
+
+/* ticker-slot: display:contents so htmx-injected spans participate in .right flex gap */
+#ticker-slot { display:contents; }
+
+/* notch / safe areas */
+.topbar { padding-left:max(16px, env(safe-area-inset-left)); padding-right:max(16px, env(safe-area-inset-right)); }
+.cockpit { padding-left:max(16px, env(safe-area-inset-left)); padding-right:max(16px, env(safe-area-inset-right)); }
+
+/* burger menu (desktop: items inline via display:contents) */
+.burger { display:contents; }
+.burger summary { display:none; list-style:none; cursor:pointer; color:var(--mute); }
+.burger .burger-menu { display:contents; }
+
+/* thin, theme-matched scrollbars (any scroll container, incl. .modal, .hist, .chart) */
+html, body, .modal, .minichart, .chart, .pbody, [style*="overflow"] {
+  scrollbar-width: thin; scrollbar-color: var(--line) transparent;
+}
+::-webkit-scrollbar { width:7px; height:7px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:var(--line); border-radius:0; }
+::-webkit-scrollbar-thumb:hover { background:var(--dim); }
+::-webkit-scrollbar-corner { background:transparent; }
+/* explicit modal scrollbar: Chrome ignores the global ::-webkit width for nested
+   containers once scrollbar-width is set, so target the modal directly */
+.modal::-webkit-scrollbar { width:7px; height:7px; }
+.modal::-webkit-scrollbar-thumb { background:var(--line); }
+
+/* ── 4. Responsive (media queries last, so mobile overrides win over base) ── */
+@media (max-width:900px){
+  .cockpit { grid-template-columns:1fr; }
+  .grid4 { grid-template-columns:repeat(2,1fr); }
+  .modes button, .winbtn { min-height:44px; }
+}
+@media (max-width:700px){
+  .topbar { padding-top:8px; padding-bottom:8px;
+    padding-left:max(12px, env(safe-area-inset-left)); padding-right:max(12px, env(safe-area-inset-right)); }
+  .brand .sub { display:none; }
+  .topbar .right { gap:10px; }
+  .burger { display:block; position:relative; }
+  .burger summary { display:inline; }
+  .burger .burger-menu { display:flex; flex-direction:column; gap:10px; position:absolute;
+    right:0; top:24px; background:var(--panel); border:1px solid var(--line); padding:12px 16px; z-index:20; }
+  .modal-back { padding:0; }
+  .modal { max-width:none; height:100%; max-height:none; }
+}
+@media (max-width:480px){
+  .grid4 { grid-template-columns:1fr; }
+  .grid2 { grid-template-columns:1fr; }
+  .bigval { font-size:36px; }
+}

@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from . import i18n, sources, validation, explain
@@ -46,6 +47,7 @@ ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
 ADMIN_PASS = os.environ.get("ADMIN_PASS") or None
 
 app = FastAPI()
+app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 
@@ -61,7 +63,7 @@ def _basic_ok(header):
 
 @app.middleware("http")
 async def _auth(request: Request, call_next):
-    if request.url.path in ("/healthz", "/readyz"):   # probe paths always open
+    if request.url.path in ("/healthz", "/readyz") or request.url.path.startswith("/static/"):   # probe + static always open
         return await call_next(request)
     if not ADMIN_PASS:                           # fail-closed: no credentials configured -> locked
         return Response("control-ui gesperrt: ADMIN_PASS nicht konfiguriert", status_code=503)
