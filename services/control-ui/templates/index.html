@@ -18,17 +18,16 @@
     <div class="brand">SUNSTEER<span class="sub">{{ t('subtitle') }}</span></div>
     <div class="right">
       <span id="ticker-slot" hx-get="/partials/ticker" hx-trigger="load, every 4s" hx-swap="innerHTML"></span>
-      <details class="burger">
-        <summary>☰</summary>
-        <div class="burger-menu">
-          <span id="clock"></span>
-          <span class="lang">
-            <a href="/lang/de" {% if lang == 'de' %}class="on"{% endif %}>DE</a> ·
-            <a href="/lang/en" {% if lang == 'en' %}class="on"{% endif %}>EN</a>
-          </span>
-          {% if grafana %}<a class="txt-dim" href="{{ grafana }}" target="_blank">GRAFANA ↗</a>{% endif %}
-        </div>
-      </details>
+      <input type="checkbox" id="burgerToggle" class="burger-toggle">
+      <label for="burgerToggle" class="burger-btn" aria-label="Menu">☰</label>
+      <div class="burger-menu">
+        <span id="clock"></span>
+        <span class="lang">
+          <a href="/lang/de" {% if lang == 'de' %}class="on"{% endif %}>DE</a> ·
+          <a href="/lang/en" {% if lang == 'en' %}class="on"{% endif %}>EN</a>
+        </span>
+        {% if grafana %}<a class="txt-dim" href="{{ grafana }}" target="_blank">GRAFANA ↗</a>{% endif %}
+      </div>
       <button class="txt-dim" onclick="openSettings()" style="background:none;border:none;cursor:pointer;font-size:14px;">⚙</button>
     </div>
   </div>
@@ -84,12 +83,12 @@
         {# vicare emits TWO .panel blocks; display:contents makes them direct grid items #}
         <div id="vicare" style="display:contents" hx-get="/partials/vicare" hx-trigger="load, every 60s" hx-swap="innerHTML"></div>
         {# inverter partial renders the full .panel (header carries the dynamic status tag) #}
-        <div id="inverter" hx-get="/partials/inverter" hx-trigger="load, every 30s" hx-swap="innerHTML"></div>
+        <div id="inverter" style="display:contents" hx-get="/partials/inverter" hx-trigger="load, every 30s" hx-swap="innerHTML"></div>
         <div class="panel">
           <h2>{{ t('weather_title') }}</h2>
           <div class="pbody">
             <div id="weather" hx-get="/partials/weather" hx-trigger="load, every 600s" hx-swap="innerHTML"></div>
-            <div class="chart" style="height:60px;margin-top:6px;">
+            <div class="chart" style="height:72px;margin-top:8px;">
               <canvas id="weatherChart"></canvas>
             </div>
           </div>
@@ -106,14 +105,6 @@
         </span></h2>
         <div class="chart pbody" style="height:140px;">
           <canvas id="eff7dChart"></canvas>
-        </div>
-      </div>
-
-      {# ENTSCHEIDUNGS-LOG panel: decisions partial #}
-      <div class="panel">
-        <h2>{{ t('decisions_title') }} <span class="tag">{{ t('updated_every', s=30) }}</span></h2>
-        <div id="decisions" hx-get="/partials/decisions" hx-trigger="load, every 30s" hx-swap="innerHTML">
-          {% include "partials/decisions.html" %}
         </div>
       </div>
 
@@ -154,6 +145,16 @@
               <div class="ttl"><span>{{ t('hist_strings') }}</span><span class="txt-dim">{{ t('hist_strings_note') }}</span></div>
               <div style="position:relative;height:176px;"><canvas id="wpStringsChart"></canvas></div>
             </div>
+          </div>
+        </details>
+      </div>
+
+      {# ENTSCHEIDUNGS-LOG panel: collapsible, after history #}
+      <div class="panel">
+        <details class="hist">
+          <summary>{{ t('decisions_title') }} <span class="tag">{{ t('updated_every', s=30) }}</span></summary>
+          <div id="decisions" class="log-scroll" hx-get="/partials/decisions" hx-trigger="load, every 30s" hx-swap="innerHTML">
+            {% include "partials/decisions.html" %}
           </div>
         </details>
       </div>
@@ -297,13 +298,14 @@
           responsive: true,
           maintainAspectRatio: false,
           interaction: { mode: 'index', intersect: false },
+          layout: { padding: { top: 4, bottom: 2 } },
           scales: {
-            x: { type: 'time', time: { unit: 'hour' }, grid: { color: chartTheme.grid } },
-            yc: { position: 'left', min: 0, max: 100, grid: { color: chartTheme.grid } },
-            yt: { position: 'right', grid: { drawOnChartArea: false },
-                  ticks: { color: chartTheme.cyan } },
+            // sparkline: no axes/grid — the panel is compact, values are on hover
+            x: { type: 'time', time: { unit: 'hour' }, display: false },
+            yc: { display: false, min: 0, max: 100 },
+            yt: { display: false },
           },
-          plugins: { legend: { labels: { color: chartTheme.mute, boxWidth: 14, padding: 12 } },
+          plugins: { legend: { display: false },
                      tooltip: { ...chartTheme.tooltip } }
         }
       });
