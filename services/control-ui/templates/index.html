@@ -85,7 +85,7 @@
         {# inverter partial renders the full .panel (header carries the dynamic status tag) #}
         <div id="inverter" style="display:contents" hx-get="/partials/inverter" hx-trigger="load, every 30s" hx-swap="innerHTML"></div>
         <div class="panel">
-          <h2>{{ t('weather_title') }}</h2>
+          <h2>{{ t('weather_title') }}{% if weather_location %} · {{ weather_location }}{% endif %}</h2>
           <div class="pbody">
             <div id="weather" hx-get="/partials/weather" hx-trigger="load, every 600s" hx-swap="innerHTML"></div>
             <div class="chart" style="height:72px;margin-top:8px;">

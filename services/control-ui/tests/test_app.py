@@ -35,6 +35,22 @@ def test_index_renders(monkeypatch):
     assert r.status_code == 200
     assert "PV-Überschuss-Steuerung" in r.text
 
+
+def test_weather_location_appended_when_set(monkeypatch):
+    _patch(monkeypatch)
+    monkeypatch.setattr(appmod, "_db", lambda: type("C", (), {"close": lambda self: None})())
+    monkeypatch.setattr(appmod, "WEATHER_LOCATION", "Testhausen")
+    r = TestClient(appmod.app).get("/?lang=en")
+    assert r.status_code == 200 and "Weather · Testhausen" in r.text
+
+
+def test_weather_location_omitted_when_unset(monkeypatch):
+    _patch(monkeypatch)
+    monkeypatch.setattr(appmod, "_db", lambda: type("C", (), {"close": lambda self: None})())
+    monkeypatch.setattr(appmod, "WEATHER_LOCATION", "")
+    r = TestClient(appmod.app).get("/?lang=en")
+    assert r.status_code == 200 and "Weather ·" not in r.text
+
 def test_status_partial_renders(monkeypatch):
     _patch(monkeypatch)
     r = TestClient(appmod.app).get("/partials/status?lang=de")

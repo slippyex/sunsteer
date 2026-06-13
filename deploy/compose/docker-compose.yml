@@ -104,6 +104,7 @@ services:
       PV_LON: ${PV_LON}
       PV_TZ: ${PV_TZ:-UTC}
       UI_DEFAULT_LANG: ${UI_DEFAULT_LANG:-en}
+      WEATHER_LOCATION: ${WEATHER_LOCATION:-}
       ADMIN_USER: ${ADMIN_USER:-admin}
       ADMIN_PASS: ${ADMIN_PASS}
       GRAFANA_URL: ${GRAFANA_URL:-}

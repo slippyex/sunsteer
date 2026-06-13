@@ -132,7 +132,7 @@ S = {
     "reason_shelly_write_failed":         ("Shelly-Schreibfehler", "Shelly write failed"),
 
     # ── weather ────────────────────────────────────────────────────────────
-    "weather_title":      ("Wetter · Nanzdietschweiler", "Weather · Nanzdietschweiler"),
+    "weather_title":      ("Wetter", "Weather"),
     "weather_today":      ("Heute", "Today"),
     "weather_tomorrow":   ("Morgen", "Tomorrow"),
     "sun_hours":          ("h Sonne", "h sun"),
