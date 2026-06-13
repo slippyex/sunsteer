@@ -15,6 +15,7 @@ from . import i18n, sources, validation, explain
 
 PROM = os.environ.get("PROMETHEUS_URL", "http://prometheus:9090")
 GRAFANA = os.environ.get("GRAFANA_URL", "")        # empty -> Grafana link hidden in the UI
+WEATHER_LOCATION = os.environ.get("WEATHER_LOCATION", "")  # empty -> weather panel shows just "Weather"
 
 # Open-Meteo weather widget — reuse the PV array location
 WLAT = os.environ.get("PV_LAT")                    # required — validated below
@@ -185,7 +186,7 @@ def index(request: Request):
     finally:
         conn.close()
     return render(request, "index.html", live=_live(), cfg=cfg,
-                  decisions=decisions, grafana=GRAFANA)
+                  decisions=decisions, grafana=GRAFANA, weather_location=WEATHER_LOCATION)
 
 
 @app.get("/partials/status", response_class=HTMLResponse)

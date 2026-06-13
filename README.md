@@ -13,6 +13,25 @@ observable, with a web UI that explains every single decision.
 It exists because the vendor cloud couldn't switch a relay. The full story:
 [*The Relay the Cloud Couldn't Switch*](https://medium.com/@mvelten773/the-relay-the-cloud-couldnt-switch-c6eac9dab196).
 
+![Sunsteer web UI — local control room for PV-surplus heat-pump control](docs/img/ui-desktop.png)
+
+<sub>The control room: live surplus and the decision being made right now (left), today's
+surplus/threshold/heat-pump-run timeline, heat-pump · inverter · weather telemetry, and the
+effectiveness of self-consumed PV. History and the full decision log expand below.</sub>
+
+<details>
+<summary>More views — history charts &amp; mobile</summary>
+
+History expanded (savings, temperatures, runtime vs. surplus, compressor, efficiency, PV strings):
+
+![Sunsteer history charts](docs/img/ui-desktop-history.png)
+
+The same control room on a phone:
+
+![Sunsteer on mobile](docs/img/ui-mobile.png)
+
+</details>
+
 ## Try it in two minutes — no hardware needed
 
 ```bash
