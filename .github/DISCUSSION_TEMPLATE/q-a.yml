@@ -1,0 +1,49 @@
+title: "[Question] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Need help getting Sunsteer running or behaving? Ask away.
+        Please don't paste secrets (passwords, tokens) or your exact location.
+        For a reproducible bug, open an [Issue](https://github.com/slippyex/sunsteer/issues) instead.
+  - type: textarea
+    id: question
+    attributes:
+      label: What are you trying to do?
+      description: Your question, and what you've already tried.
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: How are you running it?
+      options:
+        - Docker Compose (real hardware)
+        - Docker Compose demo (no hardware)
+        - Kubernetes
+        - Built from source
+        - Just evaluating / not yet running
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version / image tag
+      placeholder: "0.3.0"
+    validations:
+      required: false
+  - type: textarea
+    id: hardware
+    attributes:
+      label: Hardware & drivers (if relevant)
+      placeholder: SMA Sunny Home Manager 2.0, Shelly Pro 1PM, METER_DRIVER=sma_shm
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Relevant logs / `/state` output
+      description: Optional. Redact secrets.
+      render: shell
+    validations:
+      required: false
