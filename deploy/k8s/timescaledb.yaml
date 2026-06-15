@@ -26,6 +26,27 @@ spec:
           image: timescale/timescaledb@sha256:22e8a5ae7aef121d1537afe946dd7cc5deeeb63ab36ce19849d671bd3b663509  # latest-pg16, digest-pinned
           ports:
             - containerPort: 5432
+          # Gate dependents and rolling restarts on the DB actually accepting connections, and
+          # let k8s restart a hung server — instead of relying only on cluster DNS being up.
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", 'pg_isready -U "$POSTGRES_USER" -d energy']
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", 'pg_isready -U "$POSTGRES_USER" -d energy']
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 6
+          securityContext:
+            # Postgres must start as root to init the data dir and drop to the postgres user,
+            # so runAsNonRoot / readOnlyRootFilesystem / cap-drop-ALL would break it. These two
+            # are safe for the DB and still raise the floor (no setuid escalation; default seccomp).
+            allowPrivilegeEscalation: false
+            seccompProfile: { type: RuntimeDefault }
           env:
             - name: POSTGRES_USER
               valueFrom:

@@ -28,9 +28,10 @@ spec:
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: vicare-exporter
-          image: ghcr.io/slippyex/sunsteer/vicare-exporter:0.3.0  # pinned; kustomize images: bumps it too
+          image: ghcr.io/slippyex/sunsteer/vicare-exporter:0.3.1  # pinned; kustomize images: bumps it too
           imagePullPolicy: IfNotPresent
           env:
+            - { name: PYTHONDONTWRITEBYTECODE, value: "1" }   # readOnlyRootFilesystem
             - { name: METRICS_PORT, value: "9125" }
             - { name: VICARE_POLL_SECONDS, value: "300" }
             - { name: VICARE_DAILY_CAP, value: "1400" }
@@ -62,11 +63,20 @@ spec:
             periodSeconds: 30
             timeoutSeconds: 5
             failureThreshold: 3
+          # Write-only sidecar with no Service consumers, but a readiness probe still keeps it
+          # out of rotation / surfaces "not ready" cleanly while the metrics server comes up.
+          readinessProbe:
+            tcpSocket: { port: 9125 }
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            timeoutSeconds: 5
           securityContext:
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true   # only /data (PVC) + /tmp (emptyDir) are writable
             capabilities: { drop: ["ALL"] }
           volumeMounts:
             - { name: token, mountPath: /data }
+            - { name: tmp, mountPath: /tmp }
           resources:
             requests: { cpu: 25m, memory: 64Mi }
             limits: { memory: 128Mi }
@@ -74,6 +84,8 @@ spec:
         - name: token
           persistentVolumeClaim:
             claimName: vicare-token
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

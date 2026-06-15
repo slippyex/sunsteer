@@ -5,12 +5,14 @@ and are intentionally NOT tolerant: a write to a dead DB must not silently "succ
 (the caller skips the write when the connection is unavailable)."""
 import json
 import logging
+import math
 import os
 import time
 import urllib.parse
 import urllib.request
 
 import psycopg2
+from psycopg2 import sql
 
 log = logging.getLogger(__name__)
 
@@ -58,9 +60,12 @@ def parse_prom_value(resp: dict):
     if not result:
         return None
     try:
-        return float(result[0]["value"][1])
+        v = float(result[0]["value"][1])
     except (KeyError, IndexError, ValueError, TypeError):
         return None
+    # Prometheus can return NaN/±Inf (valid PromQL values). float() accepts them but they crash
+    # downstream int()/round(); treat non-finite as 'no value' so callers degrade to a dash.
+    return v if math.isfinite(v) else None
 
 
 def prom_query(base_url, expr, timeout=5.0):
@@ -114,10 +119,18 @@ def load_config(conn):
 
 
 def save_settings(conn, clean: dict):
+    # Only whitelisted columns are written, and column names go through sql.Identifier — the
+    # UPDATE is injection-proof by construction, not just by the _CONFIG_COLS discipline, so a
+    # future caller passing unfiltered keys still can't inject SQL.
     cols = [c for c in _CONFIG_COLS if c in clean]
-    sets = ", ".join(f"{c} = %s" for c in cols) + ", updated_at = now()"
+    if not cols:
+        return
+    assignments = [sql.SQL("{} = %s").format(sql.Identifier(c)) for c in cols]
+    assignments.append(sql.SQL("updated_at = now()"))
+    query = sql.SQL("UPDATE control_config SET {} WHERE id = 1").format(
+        sql.SQL(", ").join(assignments))
     with conn.cursor() as cur:
-        cur.execute(f"UPDATE control_config SET {sets} WHERE id = 1", [clean[c] for c in cols])
+        cur.execute(query, [clean[c] for c in cols])
 
 
 def save_mode(conn, mode, manual_relay_on):
@@ -463,14 +476,25 @@ def open_meteo(lat, lon, tz, ttl=900, timeout=8.0):
         return _meteo_cache["data"]
 
 
+# /status shape this UI understands. The controller stamps its running schema; a mismatch is
+# warned-and-continued (the contract may have changed) — never crash the card over a version.
+KNOWN_STATUS_SCHEMA = 1
+
+
 def controller_status(url, timeout=4.0):
     """GET the surplus-controller /status JSON. Returns dict or None."""
     try:
         with urllib.request.urlopen(url, timeout=timeout) as r:
-            return json.load(r)
+            data = json.load(r)
     except Exception as e:
         log.warning("controller_status: %s", e)
         return None
+    if isinstance(data, dict):
+        schema = data.get("schema")
+        if schema is not None and schema != KNOWN_STATUS_SCHEMA:
+            log.warning("/status schema=%r != expected %r — using it anyway; the controller's "
+                        "/status contract may have changed", schema, KNOWN_STATUS_SCHEMA)
+    return data
 
 
 _EMPTY_SUMMARY = {"prod_kwh": 0.0, "export_kwh": 0.0, "import_kwh": 0.0,
@@ -487,14 +511,22 @@ def today_summary(conn):
     wp_nominal_power_w. Run-time counts heatpump rows where relay_on; the divisor is
     derived from the exporter's flush cadence (TSDB_FLUSH_SECONDS) so it stays correct if
     that interval changes. The production/export/import counters are cadence-independent."""
+    # Counters are summed from POSITIVE consecutive deltas, not max-min: an inverter/meter
+    # counter reset mid-day would otherwise report the whole lifetime span as "today". Mirrors
+    # surplus-controller dblog.daily_production. (A window fn can't nest in an aggregate, so each
+    # counter sums over its own lag() subquery.)
     sql = f"""
       SELECT
-        (SELECT max(production_kwh_total)-min(production_kwh_total) FROM energy_meter
-           WHERE production_kwh_total IS NOT NULL AND time >= date_trunc('day', now())) AS prod_kwh,
-        (SELECT max(export_kwh_total)-min(export_kwh_total) FROM energy_meter
-           WHERE time >= date_trunc('day', now())) AS export_kwh,
-        (SELECT max(import_kwh_total)-min(import_kwh_total) FROM energy_meter
-           WHERE time >= date_trunc('day', now())) AS import_kwh,
+        (SELECT coalesce(sum(greatest(d, 0)), 0) FROM (
+           SELECT production_kwh_total - lag(production_kwh_total) OVER (ORDER BY time) AS d
+           FROM energy_meter
+           WHERE production_kwh_total IS NOT NULL AND time >= date_trunc('day', now())) p) AS prod_kwh,
+        (SELECT coalesce(sum(greatest(d, 0)), 0) FROM (
+           SELECT export_kwh_total - lag(export_kwh_total) OVER (ORDER BY time) AS d
+           FROM energy_meter WHERE time >= date_trunc('day', now())) e) AS export_kwh,
+        (SELECT coalesce(sum(greatest(d, 0)), 0) FROM (
+           SELECT import_kwh_total - lag(import_kwh_total) OVER (ORDER BY time) AS d
+           FROM energy_meter WHERE time >= date_trunc('day', now())) i) AS import_kwh,
         (SELECT coalesce(count(*) FILTER (WHERE relay_on),0)/{FLUSH_DIVISOR_HOURS} FROM heatpump
            WHERE time >= date_trunc('day', now())) AS wp_runtime_h,
         (SELECT coalesce(count(*) FILTER (WHERE relay_on),0)/{FLUSH_DIVISOR_HOURS} FROM heatpump) AS wp_runtime_total_h

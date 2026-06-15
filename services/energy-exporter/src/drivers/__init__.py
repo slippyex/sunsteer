@@ -9,21 +9,35 @@ The write side of the relay (Switch.Set) intentionally lives in the surplus-cont
 (relays/shelly.py) — this service is strictly READ-ONLY.
 """
 import os
+import socket
 from collections.abc import Callable
-from typing import Protocol
+from typing import Protocol, TypedDict
 
-__all__ = ("GridMeter", "RelayReader", "SUPPORTED_METERS", "get_meter",
+__all__ = ("GridMeter", "MeterReading", "RelayReader", "SUPPORTED_METERS", "get_meter",
            "SUPPORTED_RELAYS", "get_relay")
 
 SUPPORTED_METERS = ("sma_shm", "mock")
 SUPPORTED_RELAYS = ("shelly",)
 
 
+class MeterReading(TypedDict):
+    """The reading dict every GridMeter yields — the decoder's shape, consumed downstream by
+    metrics, state_server and tsdb_writer. A single checkable contract instead of a prose list."""
+    serial: int
+    import_w: float
+    export_w: float
+    surplus_w: float
+    import_kwh_total: float
+    export_kwh_total: float
+    l1_w: float
+    l2_w: float
+    l3_w: float
+
+
 class GridMeter(Protocol):
-    def run(self, on_reading: Callable[[dict], None]) -> None:
+    def run(self, on_reading: Callable[[MeterReading], None]) -> None:
         """Blocking read loop; calls on_reading(reading) per measurement. The reading
-        dict must carry the decoder shape: serial, import_w, export_w, surplus_w,
-        import_kwh_total, export_kwh_total, l1_w, l2_w, l3_w."""
+        dict carries the MeterReading shape."""
 
 
 class RelayReader(Protocol):
@@ -35,7 +49,17 @@ def get_meter(name):
     """Meter factory for METER_DRIVER. Unknown names fail fast at startup."""
     if name == "sma_shm":
         from .sma_speedwire import SmaSpeedwireMeter
-        return SmaSpeedwireMeter(os.environ.get("SHM_HOST"))
+        # Resolve SHM_HOST to an IP: the Speedwire source filter compares against addr[0] (an
+        # IP), so a hostname would silently drop every telegram and look like a dead meter.
+        # gethostbyname is a no-op for an IP literal; fail fast (not silently) if it can't resolve.
+        shm_host = os.environ.get("SHM_HOST")
+        if shm_host:
+            try:
+                shm_host = socket.gethostbyname(shm_host)
+            except OSError as e:
+                raise SystemExit(f"energy-exporter: SHM_HOST '{shm_host}' could not be "
+                                 f"resolved to an IP: {e}") from e
+        return SmaSpeedwireMeter(shm_host, iface_ip=os.environ.get("SMA_IFACE_IP") or None)
     if name == "mock":
         from .mock import MockMeter
         return MockMeter()

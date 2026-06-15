@@ -1,5 +1,6 @@
 """control-ui: FastAPI + Jinja2 + HTMX. Live from Prometheus, config/log from TimescaleDB."""
 import base64
+import binascii
 import logging
 import os
 import secrets
@@ -109,9 +110,13 @@ def _basic_ok(header):
         return False
     try:
         user, _, pw = base64.b64decode(header[6:]).decode("utf-8").partition(":")
-    except Exception:
+    except (binascii.Error, UnicodeDecodeError, ValueError):
         return False
-    return secrets.compare_digest(user, ADMIN_USER) and secrets.compare_digest(pw, ADMIN_PASS)
+    # Compute BOTH digests before combining: a short-circuiting `and` would skip the password
+    # compare on a wrong username, leaking username validity through response timing.
+    user_ok = secrets.compare_digest(user, ADMIN_USER)
+    pw_ok = secrets.compare_digest(pw, ADMIN_PASS)
+    return user_ok and pw_ok
 
 
 def _origin_ok(request: Request) -> bool:
@@ -373,10 +378,12 @@ def balance(request: Request):
         cfg = sources.load_config(conn)
         sm = sources.today_summary(conn)
         sm["forecast"] = sources.solar_forecast_today(conn)
-    grid = float(cfg.get("grid_price_eur_kwh", 0.30))
-    feed = float(cfg.get("feed_in_tariff_eur_kwh", 0.08))
+    # `or default` (not get's default): a present-but-NULL column yields None, which the
+    # default wouldn't catch -> float(None) would 500 this "never-500" card.
+    grid = float(cfg.get("grid_price_eur_kwh") or 0.30)
+    feed = float(cfg.get("feed_in_tariff_eur_kwh") or 0.08)
     # WP energy is not metered (Shelly is an SG-Ready signal) -> estimate from run-time × nominal power.
-    nominal_kw = float(cfg.get("wp_nominal_power_w", 2000)) / 1000.0
+    nominal_kw = float(cfg.get("wp_nominal_power_w") or 2000) / 1000.0
     sm["wp_today_kwh"] = round(nominal_kw * sm.get("wp_runtime_h", 0), 2)
     sm["wp_total_kwh"] = round(nominal_kw * sm.get("wp_runtime_total_h", 0), 2)
     sm["eur_today"] = explain.effectiveness_eur(sm["wp_today_kwh"], grid, feed)

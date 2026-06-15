@@ -171,3 +171,89 @@ def test_read_state_no_warn_on_known_schema(monkeypatch, caplog):
         out = M.read_state()
     assert out == payload
     assert not any("schema" in r.message.lower() for r in caplog.records)
+
+
+def _run_forecast_loop_once(monkeypatch):
+    """Drive forecast_loop for exactly one iteration; return the list of sleep() durations.
+    time.sleep records its arg and raises StopLoop to break the otherwise-infinite loop."""
+    for k, v in {"PV_LAT": "50.0", "PV_LON": "8.0", "PV_TZ": "UTC"}.items():
+        monkeypatch.setenv(k, v)
+    sleeps = []
+
+    def fake_sleep(s):
+        sleeps.append(s)
+        raise StopLoop()
+
+    monkeypatch.setattr(M.time, "sleep", fake_sleep)
+    try:
+        M.forecast_loop(lambda: object())
+    except StopLoop:
+        pass
+    return sleeps
+
+
+def test_forecast_loop_short_backoff_after_failure(monkeypatch):
+    # A transient forecast/DB failure must NOT park the loop for the full 3h refresh —
+    # that would leave the adaptive threshold stuck on its base value for hours. Retry soon.
+    def boom(*a, **k):
+        raise RuntimeError("db down")
+    monkeypatch.setattr(M.dblog, "live_conn", boom)
+    sleeps = _run_forecast_loop_once(monkeypatch)
+    assert sleeps == [min(M.FORECAST_S, 300)]
+
+
+def test_forecast_loop_full_interval_after_success(monkeypatch):
+    # A clean cycle sleeps the full refresh interval — no needless re-polling of the
+    # forecast API (and its rate limits) when nothing failed.
+    monkeypatch.setattr(M.dblog, "live_conn", lambda conn, fn: object())
+    monkeypatch.setattr(M.config, "load_config", lambda conn: {})
+    monkeypatch.setattr(M, "_compute_forecast", lambda *a: None)
+    sleeps = _run_forecast_loop_once(monkeypatch)
+    assert sleeps == [M.FORECAST_S]
+
+
+def test_forecast_remaining_is_snapshotted_per_cycle(monkeypatch):
+    # The forecast thread writes _forecast_remaining concurrently. Within one control cycle the
+    # threshold computation, the decision-log row and the metrics must all use ONE consistent
+    # snapshot — otherwise the audit log can disagree with the decision it records. Simulate a
+    # mid-cycle write and assert the value flowing to metrics is the start-of-cycle snapshot.
+    seen = []
+
+    def capture_update(mode, relay_on, eff, fc, wp_est, **kw):
+        seen.append(fc)
+
+    monkeypatch.setattr(M.metrics, "update", capture_update)
+    monkeypatch.setattr(M, "_forecast_remaining", 5.0)
+
+    def threshold_then_mutate(cfg, fc):
+        M._forecast_remaining = 999.0    # forecast thread writes between threshold and logging
+        return 2000.0
+
+    monkeypatch.setattr(M, "adaptive_threshold", threshold_then_mutate)
+    run_loop(monkeypatch, [fresh(500, shelly_on=False)], relay_seed=False)
+    assert seen == [5.0]                  # snapshot, not the mid-cycle 999.0
+
+
+def test_status_reporting_failure_is_isolated_from_the_safety_path(monkeypatch):
+    # A failure in non-safety reporting (metrics/status) must be categorised as a 'reporting'
+    # error, NOT a control 'cycle' error, and must not stop the watchdog re-arm that already
+    # ran this cycle. Keeps the safety path observably separate from telemetry.
+    def boom(**k):
+        raise RuntimeError("status server down")
+    monkeypatch.setattr(M.status_server, "set_status", boom)
+    before_rep = M.metrics.LOOP_ERRORS.labels("reporting")._value.get()
+    before_cycle = M.metrics.LOOP_ERRORS.labels("cycle")._value.get()
+    rec = run_loop(monkeypatch, [fresh(3000)], relay_seed=True)
+    assert (True, M.AUTOOFF_S) in rec.switch_calls               # re-arm happened
+    assert M.metrics.LOOP_ERRORS.labels("reporting")._value.get() == before_rep + 1
+    assert M.metrics.LOOP_ERRORS.labels("cycle")._value.get() == before_cycle
+
+
+def test_non_numeric_state_field_degrades_to_blind_not_a_crash(monkeypatch):
+    # A /state contract regression (e.g. surplus_w arriving as a string) must degrade to the
+    # blind/fail-safe path, never crash the cycle on a TypeError deep in the threshold math.
+    bad = {"surplus_w": "abc", "shm_age_s": 0.5, "shelly_reachable": True, "shelly_on": True}
+    before_cycle = M.metrics.LOOP_ERRORS.labels("cycle")._value.get()
+    rec = run_loop(monkeypatch, [bad], relay_seed=True)
+    assert (True, M.AUTOOFF_S) in rec.switch_calls               # blind-grace re-arm, didn't crash
+    assert M.metrics.LOOP_ERRORS.labels("cycle")._value.get() == before_cycle

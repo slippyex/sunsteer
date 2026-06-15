@@ -32,7 +32,9 @@ CREATE TABLE IF NOT EXISTS heatpump (
 );
 SELECT create_hypertable('heatpump', 'time', if_not_exists => TRUE);
 
--- ViCare cloud telemetry (read-only). Column order MUST match extract.FIELDS in vicare-exporter.
+-- ViCare cloud telemetry (read-only). The writer names columns explicitly, so DDL order is
+-- irrelevant; what matters is that these column NAMES match extract.FIELDS in vicare-exporter
+-- (enforced by tests/integration/test_config_consistency.py).
 CREATE TABLE IF NOT EXISTS heatpump_vicare (
   time                   TIMESTAMPTZ NOT NULL,
   dhw_temp_c             DOUBLE PRECISION,

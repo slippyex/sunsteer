@@ -1,0 +1,32 @@
+# Keeps the otherwise-manually-pinned dependencies current:
+#   - SHA-pinned GitHub Actions (workflows pin actions by commit SHA)
+#   - exact-pinned Python deps per service (requirements.txt use ==)
+# Docker is intentionally omitted: the app Dockerfiles track `python:3.12-slim` on purpose
+# (release rebuilds pick up base-image CVE fixes), and the runtime images (timescaledb/
+# prometheus/grafana) are digest-pinned deliberately in compose/k8s, not in Dockerfiles.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    commit-message: { prefix: "ci" }
+
+  - package-ecosystem: pip
+    directory: /services/energy-exporter
+    schedule: { interval: weekly }
+    commit-message: { prefix: "deps(energy-exporter)" }
+
+  - package-ecosystem: pip
+    directory: /services/surplus-controller
+    schedule: { interval: weekly }
+    commit-message: { prefix: "deps(surplus-controller)" }
+
+  - package-ecosystem: pip
+    directory: /services/control-ui
+    schedule: { interval: weekly }
+    commit-message: { prefix: "deps(control-ui)" }
+
+  - package-ecosystem: pip
+    directory: /services/vicare-exporter
+    schedule: { interval: weekly }
+    commit-message: { prefix: "deps(vicare-exporter)" }

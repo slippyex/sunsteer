@@ -50,3 +50,27 @@ def test_get_relay_shelly_uses_shelly_url(monkeypatch):
     monkeypatch.setenv("SHELLY_URL", "http://192.0.2.90")
     r = D.get_relay("shelly")
     assert r.base_url == "http://192.0.2.90"
+
+
+def test_get_meter_resolves_shm_hostname_to_ip(monkeypatch):
+    # The Speedwire source filter compares addr[0] (an IP) to shm_host. If SHM_HOST is a
+    # hostname it must be resolved to its IP at startup, else the filter silently drops EVERY
+    # telegram and the meter looks permanently dead.
+    monkeypatch.setenv("SHM_HOST", "sma.local")
+    monkeypatch.setattr(D.socket, "gethostbyname",
+                        lambda h: "192.168.5.7" if h == "sma.local" else h)
+    m = D.get_meter("sma_shm")
+    assert m.shm_host == "192.168.5.7"
+
+
+def test_get_meter_unresolvable_shm_host_fails_fast(monkeypatch):
+    import socket as _s
+    monkeypatch.setenv("SHM_HOST", "nope.invalid")
+
+    def boom(_h):
+        raise _s.gaierror("name resolution failed")
+
+    monkeypatch.setattr(D.socket, "gethostbyname", boom)
+    with pytest.raises(SystemExit) as e:
+        D.get_meter("sma_shm")
+    assert "SHM_HOST" in str(e.value)

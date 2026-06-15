@@ -64,3 +64,39 @@ def test_read_inverter_maps_all_fields(monkeypatch):
     assert r["dc_power_b"] == 400.0 and r["dc_voltage_b"] == 360.0 and r["dc_current_b"] == 1.0
     assert r["temp_c"] == 43.3 and r["operating_state"] == 307 and r["riso_ohm"] == 740287
     assert r["ac_v_l1"] == 230.0 and r["grid_freq"] == 50.0
+
+
+def test_read_inverter_nan_total_yield_is_none_not_zero(monkeypatch):
+    # A NaN lifetime-yield register must map to None (-> NULL in TSDB), never 0.0: writing a 0
+    # into the monotonic production_kwh_total counter is a spurious reset that corrupts any
+    # delta/increase query (and the controller's daily_production calibration).
+    regmap = dict(_REGMAP)
+    regmap[30513] = [0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF]   # U64 NaN sentinel (register read OK)
+
+    class _FakeNanTotal(_FakeClient):
+        def read_holding_registers(self, addr, count=2, slave=3):
+            return _Resp(regmap[addr])
+
+    monkeypatch.setitem(sys.modules, "pymodbus.client",
+                        types.SimpleNamespace(ModbusTcpClient=_FakeNanTotal))
+    r = mb.read_inverter("1.2.3.4")
+    assert r is not None                   # registers readable -> inverter still reachable
+    assert r["total_yield_kwh"] is None    # NOT 0.0
+    assert r["production_w"] == 5000.0     # unrelated fields unaffected
+
+
+def test_read_inverter_logs_on_failure(monkeypatch, caplog):
+    # A failing inverter read must be logged (with cause), not swallowed into an indistinct
+    # None — else a code bug looks identical to "inverter off at night".
+    import logging
+
+    class _Boom(_FakeClient):
+        def read_holding_registers(self, addr, count=2, slave=3):
+            raise RuntimeError("modbus exploded")
+
+    monkeypatch.setitem(sys.modules, "pymodbus.client",
+                        types.SimpleNamespace(ModbusTcpClient=_Boom))
+    with caplog.at_level(logging.WARNING):
+        r = mb.read_inverter("1.2.3.4")
+    assert r is None
+    assert any("modbus exploded" in rec.message or rec.exc_info for rec in caplog.records)

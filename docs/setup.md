@@ -27,7 +27,9 @@ cp .env.example .env
 
 Fill in everything marked **REQUIRED** in `.env`:
 
-- `SHM_HOST` — IP of the Sunny Home Manager (sender filter for the multicast).
+- `SHM_HOST` — IP or hostname of the Sunny Home Manager (sender filter for the multicast;
+  a hostname is resolved to an IP at startup). On a multi-homed host you can also set the
+  optional `SMA_IFACE_IP` to pin the multicast join to the NIC on the SHM's segment.
 - `SHELLY_URL` — e.g. `http://192.168.1.50`.
 - `PV_LAT`, `PV_LON`, `PV_TZ` — site location and timezone (forecast + day boundaries).
 - `PV_PLANES` — your roof as `[[declination, azimuth, kWp], ...]`;

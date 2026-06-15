@@ -9,6 +9,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [0.3.1] - 2026-06-15
+
+A robustness, data-integrity and hardening pass. No breaking changes to the `/state`
+contract (`schema` stays `1`); existing deployments upgrade by pulling the new images.
+
+### Added
+- The controller's `/status` endpoint is now a **versioned contract** (`schema: 1`),
+  documented in [docs/status-interface.md](docs/status-interface.md); the UI warns and
+  degrades on a version mismatch instead of silently mis-rendering.
+- `SMA_IFACE_IP` to pin the Speedwire multicast join to a specific network interface on
+  multi-homed / `hostNetwork` hosts.
+- Container-image CVE scanning (Trivy, HIGH/CRITICAL) in CI, alongside the existing
+  `pip-audit` dependency audit.
+- Dependabot for weekly updates of the SHA-pinned GitHub Actions and the pinned Python
+  dependencies.
+- A scoped **mypy type-check gate** in CI over the typed cores (decision/threshold/config,
+  decoder, extract, rate budget, and the DB/relay/driver boundaries).
+- Database query-path indexes (migration `002-query-indexes.sql`) so the hot read paths
+  stay off full hypertable scans under the 365-day retention.
+- A documented **"Network trust boundaries"** section in [SECURITY.md](SECURITY.md).
+
+### Changed
+- Compose services now declare **memory/CPU resource limits** (mirroring the Kubernetes
+  manifests) so a leak or runaway can't OOM the whole host and take down the control loop.
+- `SHM_HOST` may now be a **hostname** — it is resolved to an IP at startup. Previously a
+  hostname silently dropped every telegram (the source filter compares against an IP).
+- Hardened the Compose `timescaledb` and `db-migrate` services (`no-new-privileges`;
+  `db-migrate` also drops all Linux capabilities); the Kubernetes `vicare-exporter` pod now
+  runs with a **read-only root filesystem**.
+
+### Fixed
+- The SMA Speedwire meter now **recovers from a silently-dead meter / dropped multicast**
+  (socket read timeout → re-join) instead of blocking forever "alive but blind".
+- The PV forecast **retries quickly after a transient failure** instead of leaving the
+  adaptive threshold stuck on its base value for up to the full 3-hour refresh interval.
+- The SMA telegram decoder is resilient to unknown / truncated records (length-driven walk,
+  no desync that silently corrupts later values).
+- Daily production (controller PR calibration **and** the UI's today balance) now **survives
+  an inverter/meter counter reset** — summed from positive deltas instead of `max − min`,
+  which would otherwise report the whole lifetime span as one day.
+- A NaN inverter lifetime-yield register no longer writes a spurious `0` (a phantom counter
+  reset) into the time series — it stores `NULL`.
+- The controller coerces a non-numeric `/state` field to **"blind" (fail-safe OFF)** instead
+  of crashing the control cycle.
+- Non-finite (`NaN`/`±Inf`) Prometheus values no longer crash UI partials.
+- The ViCare exporter **exits visibly (CrashLoopBackOff) after repeated invalid-credential
+  rejections** instead of silently burning the API rate budget, and fails fast with a clear
+  message when a required environment variable is missing.
+- The control loop keeps telemetry (metrics/status) failures from being mis-counted as
+  control-cycle errors, and snapshots the forecast once per cycle so the decision log can't
+  disagree with the decision it records.
+- The UI savings/balance card degrades instead of returning HTTP 500 when a price or
+  nominal-power config column is NULL.
+- The adaptive threshold can no longer divide by zero on a degenerate `full_sun_ref_kwh`.
+- A failed inverter Modbus read is now logged with its cause (so a code/register bug is
+  distinguishable from a genuinely unreachable inverter) instead of being swallowed silently.
+- All services now log the cause when a database connection drops and is re-established,
+  instead of two of the three reconnecting silently (the resilience primitives were
+  converged and are guarded against drift by a cross-service consistency test).
+
+### Security
+- The web UI's HTTP Basic-auth check is **constant-time** with respect to the username (no
+  early-out that would leak username validity through response timing).
+- Configuration writes use `psycopg2.sql.Identifier` — injection-proof by construction, not
+  only by the column whitelist.
+- The cached ViCare OAuth token is now written **owner-only (0600)** (restrictive umask plus
+  an explicit `chmod`), so anything sharing the PVC/UID can't read the long-lived refresh grant.
+- New `STATUS_BIND` to restrict the controller's `/status` + `/healthz` server to a single
+  interface (mirrors `STATE_BIND`).
+- An **optional NetworkPolicy** (`deploy/k8s/networkpolicy.yaml`) restricts ingress to the
+  namespace, and the TimescaleDB pod gained `allowPrivilegeEscalation: false` +
+  `seccompProfile: RuntimeDefault` (the subset safe for the database).
+
 ## [0.3.0] - 2026-06-15
 
 A hardening and portability release. No breaking changes to the `/state` contract
@@ -116,7 +189,8 @@ Initial public release.
 - Docker Compose stack, a zero-config demo (`docker-compose.demo.yml`), and multi-arch
   (`amd64` + `arm64`) images on GHCR.
 
-[Unreleased]: https://github.com/slippyex/sunsteer/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/slippyex/sunsteer/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/slippyex/sunsteer/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/slippyex/sunsteer/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/slippyex/sunsteer/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/slippyex/sunsteer/compare/v0.2.0...v0.2.1

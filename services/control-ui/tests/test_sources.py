@@ -232,3 +232,49 @@ def test_recent_decisions_logs_on_db_error(caplog):
     with caplog.at_level(logging.WARNING, logger="src.sources"):
         assert S.recent_decisions(_Boom()) == []
     assert any("kaboom" in r.getMessage() for r in caplog.records)
+
+
+def test_parse_non_finite_is_none():
+    # Prometheus can legitimately return NaN/+Inf/-Inf (serialised as strings). float() happily
+    # parses them, but they then crash downstream int()/round() calls. Reject them at the source
+    # so callers degrade to a dash instead of 500-ing a partial.
+    for v in ("NaN", "+Inf", "-Inf", "Inf"):
+        resp = {"status": "success", "data": {"resultType": "vector",
+                "result": [{"metric": {}, "value": [1717740000, v]}]}}
+        assert parse_prom_value(resp) is None, v
+
+
+def test_parse_finite_still_accepted():
+    resp = {"status": "success", "data": {"resultType": "vector",
+            "result": [{"metric": {}, "value": [1717740000, "0"]}]}}
+    assert parse_prom_value(resp) == 0.0
+
+
+def test_controller_status_warns_on_schema_mismatch(monkeypatch, caplog):
+    # /status now carries a schema; an unexpected value must warn-and-continue (not silently
+    # render a possibly-changed shape), mirroring the controller's own read_state behaviour.
+    import json
+    import logging
+    import urllib.request
+
+    import src.sources as S
+
+    class _Resp:
+        def __init__(self, payload):
+            self._b = json.dumps(payload).encode()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self, *a):
+            return self._b
+
+    payload = {"schema": 99, "mode": "auto"}
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: _Resp(payload))
+    with caplog.at_level(logging.WARNING):
+        out = S.controller_status("http://x/status")
+    assert out == payload                       # degrade: still use it
+    assert any("schema" in r.message.lower() for r in caplog.records)

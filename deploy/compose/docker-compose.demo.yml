@@ -25,6 +25,11 @@ services:
       interval: 5s
       timeout: 3s
       retries: 12
+    # Mirror deploy/k8s limits so the demo can't OOM a small host. Honoured by Compose v2.
+    deploy:
+      resources:
+        limits: { cpus: "1.0", memory: 2G }
+    security_opt: [ "no-new-privileges:true" ]   # cap_drop omitted: postgres needs SETUID/SETGID
 
   db-migrate:
     image: timescale/timescaledb@sha256:22e8a5ae7aef121d1537afe946dd7cc5deeeb63ab36ce19849d671bd3b663509  # latest-pg16, digest-pinned
@@ -37,10 +42,12 @@ services:
       - ../../db/migrations:/migrations:ro
     entrypoint: ["/bin/sh", "-c",
       "for f in $$(find /migrations -name '*.sql' | sort); do echo \"applying $$f\"; psql -h timescaledb -U sunsteer -d energy -v ON_ERROR_STOP=1 -f $$f || exit 1; done; echo 'migrations done'"]
+    security_opt: [ "no-new-privileges:true" ]   # transient psql client — needs no caps
+    cap_drop: [ "ALL" ]
     restart: "no"
 
   energy-exporter:
-    image: ghcr.io/slippyex/sunsteer/energy-exporter:${SUNSTEER_VERSION:-0.3.0}
+    image: ghcr.io/slippyex/sunsteer/energy-exporter:${SUNSTEER_VERSION:-0.3.1}
     build: ../../services/energy-exporter
     environment:
       METER_DRIVER: mock
@@ -55,9 +62,12 @@ services:
         condition: service_completed_successfully
     security_opt: [ "no-new-privileges:true" ]
     cap_drop: [ "ALL" ]
+    deploy:
+      resources:
+        limits: { cpus: "0.3", memory: 192M }
 
   surplus-controller:
-    image: ghcr.io/slippyex/sunsteer/surplus-controller:${SUNSTEER_VERSION:-0.3.0}
+    image: ghcr.io/slippyex/sunsteer/surplus-controller:${SUNSTEER_VERSION:-0.3.1}
     build: ../../services/surplus-controller
     environment:
       EXPORTER_STATE_URL: http://energy-exporter:9121/state
@@ -76,9 +86,12 @@ services:
         condition: service_completed_successfully
     security_opt: [ "no-new-privileges:true" ]
     cap_drop: [ "ALL" ]
+    deploy:
+      resources:
+        limits: { cpus: "0.3", memory: 192M }
 
   control-ui:
-    image: ghcr.io/slippyex/sunsteer/control-ui:${SUNSTEER_VERSION:-0.3.0}
+    image: ghcr.io/slippyex/sunsteer/control-ui:${SUNSTEER_VERSION:-0.3.1}
     build: ../../services/control-ui
     environment:
       PV_LAT: "52.52"
@@ -98,6 +111,9 @@ services:
         condition: service_completed_successfully
     security_opt: [ "no-new-privileges:true" ]
     cap_drop: [ "ALL" ]
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 256M }
 
 volumes:
   demo-pgdata:

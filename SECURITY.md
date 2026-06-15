@@ -39,6 +39,27 @@ Please include:
 - Coordinated disclosure: we'll agree on a timeline before any public write-up, and publish
   a GitHub Security Advisory once a fix is available.
 
+## Network trust boundaries (by design)
+
+Sunsteer assumes a **trusted private network** between its services. The following are
+deliberate, documented trade-offs, not vulnerabilities:
+
+- **Unauthenticated internal endpoints.** `energy-exporter` `/state` and `/metrics`, and
+  `surplus-controller` `/status`, `/healthz` and `/metrics`, are served without auth and
+  bind to all interfaces by default. They carry read-only telemetry for the in-cluster
+  controller and Prometheus. Restrict exposure with `STATE_BIND` (exporter) / `STATUS_BIND`
+  (controller), and/or apply the optional `deploy/k8s/networkpolicy.yaml`. Under
+  `network_mode: host` / `hostNetwork` they are reachable on the node network (and a
+  NetworkPolicy cannot restrict a host-network pod), so keep that network trusted.
+- **The control UI is the one authenticated surface.** It is fail-closed behind HTTP Basic
+  auth (503 without `ADMIN_PASS`) and binds to loopback by default — put it behind a TLS
+  reverse proxy before exposing it.
+- **CSRF with no Origin/Referer is allowed.** The UI's CSRF guard permits requests that send
+  neither header (non-browser clients like `curl`/scripts), since the real threat — a browser
+  silently replaying cached Basic credentials cross-site — always sends one of them.
+- **SMA Speedwire source-IP filtering is spoofable** on a flat L2 multicast segment; the worst
+  case is bad gauge values (pure parsing, no code execution), never remote control.
+
 ## Scope and safety note
 
 Especially relevant are issues in the **fail-safe chain** — anything that could keep the

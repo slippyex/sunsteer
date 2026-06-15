@@ -1,10 +1,10 @@
 """Safety-critical decision core. Pure: no I/O, no time, no globals."""
 
 
-def decide(mode, relay_on, manual_relay_on,
-           on_streak, off_streak, on_delay_cycles, off_delay_cycles,
-           secs_since_on, secs_since_off, min_runtime_s, min_offtime_s,
-           state_fresh=True):
+def decide(mode: str, relay_on: bool, manual_relay_on: bool,
+           on_streak: int, off_streak: int, on_delay_cycles: int, off_delay_cycles: int,
+           secs_since_on: float, secs_since_off: float, min_runtime_s: int, min_offtime_s: int,
+           state_fresh: bool = True) -> tuple[bool, str, str]:
     """Return (relay_target: bool, action: str, reason: str).
 
     action ∈ {switched_on, switched_off, no_change}.
