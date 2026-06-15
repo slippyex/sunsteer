@@ -1,0 +1,77 @@
+name: 🐛 Bug report
+description: Something isn't working as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report! Please don't include secrets (passwords, tokens) or your
+        exact location in logs or screenshots.
+        For security vulnerabilities, use private reporting instead — see SECURITY.md.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+      placeholder: The controller stayed OFF although there was clear surplus…
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. …
+        2. …
+        3. …
+    validations:
+      required: true
+  - type: dropdown
+    id: service
+    attributes:
+      label: Which service?
+      multiple: true
+      options:
+        - energy-exporter
+        - surplus-controller
+        - control-ui
+        - vicare-exporter
+        - deploy / compose / k8s
+        - not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: How is it deployed?
+      options:
+        - Docker Compose (real hardware)
+        - Docker Compose demo (no hardware)
+        - Kubernetes
+        - Built from source
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version / image tag
+      placeholder: "0.3.0  (or sha-… / built from main)"
+    validations:
+      required: true
+  - type: textarea
+    id: hardware
+    attributes:
+      label: Hardware (if relevant)
+      description: Grid meter, relay, heat pump / inverter models, and which meter/relay driver.
+      placeholder: SMA Sunny Home Manager 2.0, Shelly Pro 1PM, METER_DRIVER=sma_shm
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs / metrics
+      description: Container logs, alerts, or the `/state` JSON. Secrets redacted.
+      render: shell
+    validations:
+      required: false
