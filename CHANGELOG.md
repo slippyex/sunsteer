@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [0.3.2] - 2026-06-15
+
+Maintenance release: routine dependency and CI-action updates (via Dependabot). No code or
+behaviour changes; the `/state` contract stays `schema: 1`. Upgrade by pulling the new images.
+
+### Changed
+- **Python dependencies** bumped across the services:
+  - `fastapi` 0.137.0 → 0.137.1, `starlette` 1.0.1 → 1.3.1, `uvicorn[standard]` 0.30.6 → 0.49.0,
+    `python-multipart` 0.0.27 → 0.0.32 (control-ui).
+  - `prometheus_client` 0.21.0 → 0.25.0 (all exporters + controller).
+  - `psycopg2-binary` 2.9.9 → 2.9.12 (all services).
+  - `pymodbus` 3.6.9 → 3.13.1 (energy-exporter).
+  - `tzdata` 2025.1 → 2026.2 (surplus-controller).
+- **CI GitHub Actions** bumped (SHA-pinned): `actions/checkout` v4 → v6.0.3,
+  `actions/setup-python` v5 → v6.2.0, `docker/build-push-action` v6 → v7.2.0,
+  `docker/setup-qemu-action` v3 → v4.1.0, `docker/login-action` v3 → v4.2.0,
+  `docker/metadata-action` v5 → v6.1.0.
+
 ## [0.3.1] - 2026-06-15
 
 A robustness, data-integrity and hardening pass. No breaking changes to the `/state`
@@ -189,7 +207,8 @@ Initial public release.
 - Docker Compose stack, a zero-config demo (`docker-compose.demo.yml`), and multi-arch
   (`amd64` + `arm64`) images on GHCR.
 
-[Unreleased]: https://github.com/slippyex/sunsteer/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/slippyex/sunsteer/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/slippyex/sunsteer/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/slippyex/sunsteer/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/slippyex/sunsteer/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/slippyex/sunsteer/compare/v0.2.1...v0.2.2

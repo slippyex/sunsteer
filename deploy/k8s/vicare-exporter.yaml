@@ -28,7 +28,7 @@ spec:
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: vicare-exporter
-          image: ghcr.io/slippyex/sunsteer/vicare-exporter:0.3.1  # pinned; kustomize images: bumps it too
+          image: ghcr.io/slippyex/sunsteer/vicare-exporter:0.3.2  # pinned; kustomize images: bumps it too
           imagePullPolicy: IfNotPresent
           env:
             - { name: PYTHONDONTWRITEBYTECODE, value: "1" }   # readOnlyRootFilesystem
