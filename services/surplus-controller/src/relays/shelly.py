@@ -18,12 +18,12 @@ def build_set_url(base_url: str, on: bool, switch_id: int, auto_off_s: int | Non
 class ShellyRelayActuator:
     """Relay actuator for Shelly Gen2 RPC (read + Switch.Set with toggle_after watchdog)."""
 
-    def __init__(self, base_url, switch_id=0, timeout=5.0):
+    def __init__(self, base_url: str, switch_id: int = 0, timeout: float = 5.0):
         self.base_url = base_url
         self.switch_id = switch_id
         self.timeout = timeout
 
-    def get_state(self):
+    def get_state(self) -> bool | None:
         url = f"{self.base_url.rstrip('/')}/rpc/Switch.GetStatus?id={self.switch_id}"
         try:
             with urllib.request.urlopen(url, timeout=self.timeout) as resp:
@@ -34,7 +34,7 @@ class ShellyRelayActuator:
             _log.debug("Shelly get_state failed (GET %s)", url, exc_info=True)
             return None
 
-    def set(self, on, auto_off_s):
+    def set(self, on: bool, auto_off_s: int | None) -> bool:
         """True only on HTTP 200 AND a non-error RPC body. Gen2 can return 200 with
         {"error": ...} — that must count as a failed switch."""
         # SAFETY: never emit an ON without an armed hardware auto-off watchdog. A

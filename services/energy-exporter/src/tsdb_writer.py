@@ -1,5 +1,10 @@
 """1-minute aggregation + INSERT into TimescaleDB."""
+import logging
+from collections.abc import Callable
+
 import psycopg2
+
+_log = logging.getLogger(__name__)
 
 _MEAN_FIELDS = ("import_w", "export_w", "surplus_w", "l1_w", "l2_w", "l3_w")
 _LAST_FIELDS = ("import_kwh_total", "export_kwh_total")
@@ -38,7 +43,7 @@ def write_heatpump(conn, r: dict) -> None:
     conn.commit()
 
 
-def connect(host, port, db, user, password):
+def connect(host: str, port: int, db: str, user: str, password: str):
     conn = psycopg2.connect(host=host, port=port, dbname=db, user=user, password=password)
     # autocommit so a single failed INSERT (e.g. table briefly missing on first boot)
     # cannot leave the connection in an aborted-transaction state and block all later writes.
@@ -46,7 +51,7 @@ def connect(host, port, db, user, password):
     return conn
 
 
-def live_conn(conn, connect_fn):
+def live_conn(conn, connect_fn: Callable[[], object]):
     """Return a usable connection, (re)connecting if the current one is dead/None.
     A TimescaleDB restart silently kills the held connection; pinging SELECT 1 detects
     that and reconnects, so the service recovers instead of degrading forever."""
@@ -56,10 +61,18 @@ def live_conn(conn, connect_fn):
                 cur.execute("SELECT 1")
             return conn
     except Exception:
-        pass
+        # Held connection is dead (e.g. TimescaleDB restarted). Log the cause, then reconnect
+        # below — behaviour unchanged, just no longer silent.
+        _log.warning("DB connection ping failed — reconnecting", exc_info=True)
     try:
         if conn is not None:
             conn.close()
     except Exception:
         pass
-    return connect_fn()
+    try:
+        return connect_fn()
+    except Exception:
+        # Reconnect failed; re-raise so the caller's loop degrades as before, but log the cause
+        # so a persistent DB outage is visible instead of only counted.
+        _log.warning("DB (re)connect failed", exc_info=True)
+        raise

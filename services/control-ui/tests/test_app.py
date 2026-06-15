@@ -518,3 +518,35 @@ def test_pos_int_clamps_bad_db_port(monkeypatch):
     monkeypatch.setenv("X", "0"); assert appmod._pos_int("X", 5432) == 5432
     monkeypatch.setenv("X", "5432"); assert appmod._pos_int("X", 1) == 5432
     monkeypatch.delenv("X", raising=False); assert appmod._pos_int("X", 5432) == 5432
+
+
+def test_basic_ok_compares_password_even_on_wrong_username(monkeypatch):
+    # Constant-time: a wrong username must NOT short-circuit past the password compare, or the
+    # response time leaks whether a username is valid. Assert BOTH digests are computed.
+    calls = []
+    real = appmod.secrets.compare_digest
+
+    def counting(a, b):
+        calls.append((a, b))
+        return real(a, b)
+
+    monkeypatch.setattr(appmod.secrets, "compare_digest", counting)
+    monkeypatch.setattr(appmod, "ADMIN_USER", "admin")
+    monkeypatch.setattr(appmod, "ADMIN_PASS", "secret")
+    header = "Basic " + base64.b64encode(b"wronguser:whatever").decode()
+    assert _REAL_BASIC_OK(header) is False    # the real fn (a fixture stubs appmod._basic_ok)
+    assert len(calls) == 2     # username AND password both compared (no early-out)
+
+
+def test_balance_survives_null_config_prices(monkeypatch):
+    # The balance card's contract is "degrade, never 500". A present-but-NULL price/power column
+    # makes cfg.get(key, default) return None (key exists) -> float(None) would 500 the partial.
+    _patch(monkeypatch)
+    monkeypatch.setattr(appmod.sources, "load_config", lambda c: {
+        "grid_price_eur_kwh": None, "feed_in_tariff_eur_kwh": None, "wp_nominal_power_w": None})
+    monkeypatch.setattr(appmod.sources, "today_summary", lambda c: {
+        "prod_kwh": 0.0, "export_kwh": 0.0, "import_kwh": 0.0,
+        "self_consumption": 0.0, "wp_runtime_h": 0.0, "wp_runtime_total_h": 0.0})
+    monkeypatch.setattr(appmod.sources, "solar_forecast_today", lambda c: {})
+    r = TestClient(appmod.app).get("/partials/balance")
+    assert r.status_code == 200

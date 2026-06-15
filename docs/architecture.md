@@ -56,6 +56,14 @@ A deliberately boring loop (default every 15 s):
    requires strong, real surplus right now. `remaining_kwh` comes from Open-Meteo GTI
    per roof plane (forecast.solar as fallback), converted with a **performance ratio
    that self-calibrates daily** against your actual production.
+
+   > Unlike the meter and relay (which sit behind `METER_DRIVER` / `RELAY_DRIVER` driver
+   > protocols), the forecast is **deliberately not a pluggable driver**: it is a fixed
+   > Open-Meteo-GTI-primary / forecast.solar-fallback strategy. Open-Meteo is global and
+   > free, and the daily PR self-calibration absorbs source bias, so a provider abstraction
+   > would add a seam with no second implementation to justify it (YAGNI) — the
+   > self-calibration, not source-swapping, is what makes the controller robust to a
+   > mediocre forecast.
 4. **Hysteresis state machine:** the threshold must be exceeded for `on_delay_cycles`
    consecutive cycles to switch ON (and the OFF condition for `off_delay_cycles` to
    switch OFF); `min_runtime_s` / `min_offtime_s` protect the compressor. Modes:
@@ -70,7 +78,8 @@ FastAPI + htmx + Chart.js, bilingual (EN/DE), fail-closed behind HTTP Basic auth
 below the 2382 W threshold, 2/3 cycles"), the decision log shows every switch with its
 reason, history charts cover temperatures, runs, compressor, savings. Runtime tuning
 (thresholds, delays, prices) is edited here and takes effect the next control cycle —
-no restarts.
+no restarts. It reads the controller's live decision state from the versioned
+[`/status` contract](status-interface.md).
 
 ### vicare-exporter — optional telemetry
 

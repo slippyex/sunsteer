@@ -1,0 +1,28 @@
+# OPTIONAL hardening — not applied by default (uncomment in kustomization.yaml to enable).
+#
+# The internal endpoints are unauthenticated by design (energy-exporter /state + /metrics,
+# surplus-controller /status + /healthz + /metrics — see SECURITY.md "Network trust
+# boundaries"). This policy restricts ingress to within the sunsteer namespace, so they are
+# not reachable from other namespaces in the cluster.
+#
+# Caveats:
+#   - Requires a CNI that enforces NetworkPolicy (Calico, Cilium, …). On a CNI without
+#     enforcement it is silently a no-op.
+#   - Does NOT cover energy-exporter: it runs on hostNetwork (required for SMA Speedwire
+#     multicast), and NetworkPolicy cannot restrict host-network pods. Use a host firewall
+#     for that segment (SECURITY.md says the same).
+#   - If you scrape /metrics with a Prometheus in another namespace, add an `ingress.from`
+#     rule for that namespace (or label) — this default denies it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sunsteer-allow-intra-namespace
+  namespace: sunsteer
+spec:
+  podSelector: {}            # all (non-hostNetwork) pods in the namespace
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: sunsteer

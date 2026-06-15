@@ -34,7 +34,13 @@ def set_from(data):
         v = data.get(key)
         if v is None:
             continue
-        g.set(1 if v is True else (0 if v is False else float(v)))
+        if v is True or v is False:
+            g.set(1 if v else 0)
+            continue
+        try:
+            g.set(float(v))           # skip (don't crash the cycle) on a non-numeric quirk value
+        except (ValueError, TypeError):
+            continue
     ts = _parse_ts(data.get("energy_read_at"))
     if ts is not None:
         ENERGY_READ_AT.set(ts)

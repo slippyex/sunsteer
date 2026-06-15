@@ -1,0 +1,9 @@
+# Keep the build context lean: caches, virtualenvs and bytecode never belong in an image
+# (the final stage copies only src/templates/static; the test stage adds tests/).
+.venv/
+venv/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.DS_Store

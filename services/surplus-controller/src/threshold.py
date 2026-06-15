@@ -3,9 +3,12 @@
 
 def adaptive_threshold(cfg: dict, forecast_remaining_kwh) -> float:
     base = cfg["threshold_base_w"]
-    if not cfg.get("adapt_enabled", True) or forecast_remaining_kwh is None:
+    ref = cfg["full_sun_ref_kwh"]
+    # ref is clamped >= 1.0 by clamp_config on the real path; guard anyway so a raw/unclamped
+    # cfg can't ZeroDivisionError inside the control cycle (which would silently skip actuation).
+    if not cfg.get("adapt_enabled", True) or forecast_remaining_kwh is None or ref <= 0:
         return base
-    factor = forecast_remaining_kwh / cfg["full_sun_ref_kwh"]
+    factor = forecast_remaining_kwh / ref
     factor = max(0.0, min(1.0, factor))
     return base - (base - cfg["threshold_min_w"]) * factor
 

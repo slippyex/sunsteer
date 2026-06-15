@@ -75,7 +75,7 @@ def update_inverter(r) -> None:
         return
     INV_REACHABLE.set(1)
     INV_POWER.set(r["production_w"])
-    INV_TOTAL.set(r["total_yield_kwh"])
+    _setg(INV_TOTAL, r["total_yield_kwh"])   # None when the lifetime counter reads NaN (e.g. night)
     _setg(INV_DC_POWER.labels("a"), r.get("dc_power_a"))
     _setg(INV_DC_POWER.labels("b"), r.get("dc_power_b"))
     _setg(INV_DC_VOLTAGE.labels("a"), r.get("dc_voltage_a"))

@@ -1,3 +1,4 @@
+import pytest
 from src import main, metrics
 
 
@@ -93,3 +94,93 @@ def test_pos_int_clamps_bad_values(monkeypatch):
     monkeypatch.setenv("X", "0"); assert main._pos_int("X", 9125, hi=65535) == 9125
     monkeypatch.setenv("X", "1400"); assert main._pos_int("X", 1) == 1400
     monkeypatch.delenv("X", raising=False); assert main._pos_int("X", 42) == 42
+
+
+def test_connect_with_retry_exits_after_repeated_invalid_credentials(monkeypatch):
+    # Invalid credentials are permanent; looping forever silently burns the (uncounted)
+    # discovery-call budget against the rate-limited API. After a bounded number of attempts
+    # it must exit so the failure is VISIBLE (CrashLoopBackOff), not hidden.
+    calls = {"n": 0}
+
+    def boom(_tf):
+        calls["n"] += 1
+        raise RuntimeError("invalid credentials")
+
+    monkeypatch.setattr(main.auth, "connect_device", boom)
+    monkeypatch.setattr(main.time, "sleep", lambda *_: None)
+    with pytest.raises(SystemExit):
+        main.connect_with_retry("tok", max_invalid_attempts=3)
+    assert calls["n"] == 3
+
+
+def test_connect_with_retry_recovers_from_transient_errors(monkeypatch):
+    # Transient errors (network blips) must NOT count toward the invalid-credentials exit:
+    # the loop keeps retrying and succeeds once discovery works.
+    calls = {"n": 0}
+    sentinel = object()
+
+    def flaky(_tf):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise RuntimeError("network blip")
+        return sentinel
+
+    monkeypatch.setattr(main.auth, "connect_device", flaky)
+    monkeypatch.setattr(main.time, "sleep", lambda *_: None)
+    out = main.connect_with_retry("tok", max_invalid_attempts=2)
+    assert out is sentinel
+    assert calls["n"] == 3
+
+
+def test_next_backoff_jumps_to_cap_on_rate_limit():
+    # A 429 means "be quiet" -> go straight to the cap regardless of the current backoff.
+    assert main._next_backoff(True, 0, max_backoff=1800) == 1800
+    assert main._next_backoff(True, 600, max_backoff=1800) == 1800
+
+
+def test_next_backoff_ramps_linearly_otherwise():
+    # Non-rate-limit errors ramp by POLL_S each time, capped at max_backoff.
+    assert main._next_backoff(False, 0, max_backoff=1800) == main.POLL_S
+    assert main._next_backoff(False, 100000, max_backoff=1800) == 1800
+
+
+def test_validate_env_lists_all_missing(monkeypatch):
+    # A missing DB_/VICARE_ var must fail fast with a clear message, not a bare KeyError deep
+    # inside _db()/connect — symmetry with the other services' validate_env().
+    for v in main.REQUIRED_ENV:
+        monkeypatch.delenv(v, raising=False)
+    with pytest.raises(SystemExit) as e:
+        main.validate_env()
+    assert "DB_HOST" in str(e.value) and "VICARE_USER" in str(e.value)
+
+
+def test_validate_env_rejects_change_me_placeholder(monkeypatch):
+    for v in main.REQUIRED_ENV:
+        monkeypatch.setenv(v, "x")
+    monkeypatch.setenv("VICARE_PASS", "CHANGE_ME")
+    with pytest.raises(SystemExit) as e:
+        main.validate_env()
+    assert "CHANGE_ME" in str(e.value)
+
+
+def test_validate_env_passes_when_all_set(monkeypatch):
+    for v in main.REQUIRED_ENV:
+        monkeypatch.setenv(v, "x")
+    main.validate_env()    # no raise
+
+
+def test_secure_token_file_restricts_permissions(tmp_path):
+    # The cached OAuth token is a long-lived refresh grant to the user's Viessmann account;
+    # PyViCare writes it with the default umask (~0644). Lock it to owner-only.
+    import os
+    import stat
+    p = tmp_path / "vicare_token.json"
+    p.write_text("{}")
+    os.chmod(p, 0o644)
+    main.secure_token_file(str(p))
+    assert stat.S_IMODE(os.stat(p).st_mode) == 0o600
+
+
+def test_secure_token_file_noop_when_missing(tmp_path):
+    # No file yet (first start) -> must not raise.
+    main.secure_token_file(str(tmp_path / "nope.json"))

@@ -29,3 +29,11 @@ def test_energy_read_at_garbage_ignored():
     before = metrics.ENERGY_READ_AT._value.get()
     metrics.set_from({"energy_read_at": "not-a-date"})
     assert metrics.ENERGY_READ_AT._value.get() == before
+
+
+def test_set_from_skips_non_numeric_value_without_crashing():
+    # A field that should be numeric but arrives as a non-coercible string (ViCare quirk) must
+    # be skipped, not crash the whole poll cycle (which would perpetually inc SCRAPE_ERRORS).
+    from src import metrics
+    metrics.set_from({"dhw_temp_c": "n/a", "compressor_starts": 5})   # one bad, one good
+    assert metrics.GAUGES["compressor_starts"]._value.get() == 5      # good value still set

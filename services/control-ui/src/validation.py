@@ -22,7 +22,7 @@ def validate_settings(form: dict):
     """form: dict of string values (HTML form). Returns (clean, errors).
     clean uses control_config column names (run-times in SECONDS). If errors
     is non-empty, do NOT write."""
-    e = {}
+    e: dict = {}
     base = _num(form, "threshold_base_w", e, float, lo=0, hi=15000)
     mn = _num(form, "threshold_min_w", e, float, lo=0, hi=15000)
     off = _num(form, "threshold_off_w", e, float, lo=0, hi=15000)

@@ -41,3 +41,11 @@ def test_available_prevents_false_off():
     raw = -1200  # WP eating ~all surplus; off-threshold is 200 for this scenario
     assert available_surplus(raw, True, 1500) == 300  # 300 > 200 -> stays on (real PV ok)
     assert available_surplus(raw, True, 1000) == -200  # under-estimate -> would turn off
+
+
+def test_adaptive_threshold_survives_zero_ref():
+    # A raw/hand-built cfg with full_sun_ref_kwh == 0 must not ZeroDivisionError inside the
+    # control cycle (the broad cycle guard would swallow it and silently skip actuation).
+    cfg = {"threshold_base_w": 2500.0, "threshold_min_w": 1500.0,
+           "full_sun_ref_kwh": 0.0, "adapt_enabled": True}
+    assert adaptive_threshold(cfg, 10.0) == 2500.0    # degrade to base, no crash

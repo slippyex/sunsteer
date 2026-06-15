@@ -11,6 +11,10 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+# /status is a contract the UI reads many keys off; stamp a version (like /state's schema)
+# so the consumer can detect a breaking shape change instead of silently mis-rendering.
+STATUS_SCHEMA = 1
+
 _status = {}
 _beat = None          # wall-clock of the last completed loop iteration
 _beat_max = 60.0      # loop considered hung if no beat within this many seconds
@@ -45,7 +49,7 @@ def _alive():
 
 def _snapshot():
     with _lock:
-        return dict(_status)
+        return {"schema": STATUS_SCHEMA, **_status}
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -73,5 +77,7 @@ class _Handler(BaseHTTPRequestHandler):
         pass
 
 
-def serve(port):
-    ThreadingHTTPServer(("", port), _Handler).serve_forever()
+def serve(port, bind=""):
+    # bind "" = all interfaces (default); pass a specific IP to restrict /status + /healthz
+    # exposure (the data is operational telemetry, no secrets, but defense in depth).
+    ThreadingHTTPServer((bind, port), _Handler).serve_forever()

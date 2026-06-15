@@ -1,4 +1,7 @@
 """SMA inverter reader via Modbus TCP — READ-ONLY (SMA register profile)."""
+import logging
+
+_log = logging.getLogger(__name__)
 
 # SMA Modbus holding registers (SMA device profile, Sunny Tripower X — verified live 2026-06)
 REG_AC_POWER = 30775      # S32, W  — current AC active power = production
@@ -72,7 +75,9 @@ def read_inverter(host, port=502, unit_id=3, timeout=5.0):
         dc_a, dc_b = s32(REG_DC_P_A), s32(REG_DC_P_B)
         return {
             "production_w": float(power) if power is not None else 0.0,
-            "total_yield_kwh": (total / 1000.0) if total is not None else 0.0,
+            # NaN lifetime counter -> None (NULL in TSDB), never 0.0: a 0 in the monotonic
+            # production_kwh_total reads as a counter reset and corrupts delta/increase queries.
+            "total_yield_kwh": (total / 1000.0) if total is not None else None,
             "dc_power_a": float(dc_a) if dc_a is not None else None,
             "dc_voltage_a": scaled(u32(REG_DC_V_A), 0.01),
             "dc_current_a": scaled(u32(REG_DC_I_A), 0.001),
@@ -88,6 +93,9 @@ def read_inverter(host, port=502, unit_id=3, timeout=5.0):
             "grid_freq": scaled(u32(REG_GRID_FREQ), 0.01),
         }
     except Exception:
+        # Log the cause so a code/register bug is distinguishable from "inverter unreachable"
+        # (both return None -> INV_REACHABLE=0). Non-safety telemetry, so still degrade to None.
+        _log.warning("inverter modbus read failed", exc_info=True)
         return None
     finally:
         client.close()

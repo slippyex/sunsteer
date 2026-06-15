@@ -18,6 +18,15 @@ DEFAULTS = {
     "pv_performance_ratio": 0.70,  # Open-Meteo GTI -> kWh; self-calibrated from actual production
 }
 _VALID_MODES = ("auto", "manual", "paused")
+# When a bad row sets off-threshold >= min-threshold, drop off this far below min to keep the
+# documented off < min invariant (prevents on/off bands from touching and chattering).
+_OFF_THRESHOLD_GAP_W = 50.0
+# Compressor-protection floors (seconds) and physical caps for the clamps below — a bad DB row
+# must never push these below what protects the heat pump or above what's physically plausible.
+_MIN_RUNTIME_FLOOR_S = 600
+_MIN_OFFTIME_FLOOR_S = 300
+_WP_POWER_CAP_W = 20000.0
+_PR_MIN, _PR_MAX = 0.3, 1.0
 
 
 def clamp_config(cfg: dict) -> dict:
@@ -38,16 +47,16 @@ def clamp_config(cfg: dict) -> dict:
     # Guarantee the claimed invariant off < min whenever min > 0. The degenerate min == 0 case
     # can't satisfy off < 0 (off is clamped >= 0), so it stays a no-op (off == min == 0).
     if c["threshold_min_w"] > 0 and c["threshold_off_w"] >= c["threshold_min_w"]:
-        c["threshold_off_w"] = max(0.0, c["threshold_min_w"] - 50.0)
+        c["threshold_off_w"] = max(0.0, c["threshold_min_w"] - _OFF_THRESHOLD_GAP_W)
     c["on_delay_cycles"] = max(1, int(c["on_delay_cycles"]))
     c["off_delay_cycles"] = max(1, int(c["off_delay_cycles"]))
-    c["min_runtime_s"] = max(600, int(c["min_runtime_s"]))
-    c["min_offtime_s"] = max(300, int(c["min_offtime_s"]))
+    c["min_runtime_s"] = max(_MIN_RUNTIME_FLOOR_S, int(c["min_runtime_s"]))
+    c["min_offtime_s"] = max(_MIN_OFFTIME_FLOOR_S, int(c["min_offtime_s"]))
     c["full_sun_ref_kwh"] = max(1.0, float(c["full_sun_ref_kwh"]))
     c["feed_in_tariff_eur_kwh"] = max(0.0, float(c["feed_in_tariff_eur_kwh"]))
     c["grid_price_eur_kwh"] = max(0.0, float(c["grid_price_eur_kwh"]))
-    c["wp_nominal_power_w"] = max(0.0, min(float(c["wp_nominal_power_w"]), 20000.0))
-    c["pv_performance_ratio"] = max(0.3, min(float(c["pv_performance_ratio"]), 1.0))
+    c["wp_nominal_power_w"] = max(0.0, min(float(c["wp_nominal_power_w"]), _WP_POWER_CAP_W))
+    c["pv_performance_ratio"] = max(_PR_MIN, min(float(c["pv_performance_ratio"]), _PR_MAX))
     return c
 
 
