@@ -1,0 +1,92 @@
+# control-ui — web UI (EN/DE): live status, decision log, history, settings.
+# Fail-closed HTTP Basic auth: without ADMIN_PASS the UI serves 503.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: control-ui
+  namespace: sunsteer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: control-ui
+  template:
+    metadata:
+      labels:
+        app: control-ui
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: control-ui
+          image: ghcr.io/slippyex/sunsteer/control-ui:0.3.0  # pinned; kustomize images: bumps it too
+          imagePullPolicy: IfNotPresent
+          env:
+            - { name: PYTHONDONTWRITEBYTECODE, value: "1" }   # readOnlyRootFilesystem
+            - { name: PV_LAT, value: "CHANGE_ME" }
+            - { name: PV_LON, value: "CHANGE_ME" }
+            - { name: PV_TZ, value: "UTC" }
+            - { name: UI_DEFAULT_LANG, value: "en" }
+            - { name: GRAFANA_URL, value: "" }            # optional: Grafana link (hidden when empty)
+            - { name: WEATHER_LOCATION, value: "" }        # optional: place name next to the weather panel
+            - { name: TSDB_FLUSH_SECONDS, value: "60" }    # must match energy-exporter's write cadence
+            # CSRF: POSTs require Origin == UI host. Behind an Ingress/reverse proxy the
+            # public origin differs — uncomment and set it so it's accepted.
+            # - { name: ALLOWED_ORIGIN, value: "https://sunsteer.example.com" }
+            - { name: CONTROLLER_STATUS_URL, value: "http://surplus-controller:9124/status" }
+            - { name: DB_HOST, value: "timescaledb" }
+            - { name: DB_PORT, value: "5432" }
+            - { name: DB_NAME, value: "energy" }
+            - { name: ADMIN_USER, value: "admin" }
+            - name: ADMIN_PASS
+              valueFrom:
+                secretKeyRef: { name: sunsteer-secrets, key: ADMIN_PASS }
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef: { name: sunsteer-secrets, key: DB_USER }
+            - name: DB_PASS
+              valueFrom:
+                secretKeyRef: { name: sunsteer-secrets, key: DB_PASS }
+          ports:
+            - { containerPort: 8080, name: http }
+          # liveness = process up (/healthz always 200; a locked pod must not restart).
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            timeoutSeconds: 5
+          # readiness = ready to serve (/readyz is 503 when locked / no ADMIN_PASS).
+          readinessProbe:
+            httpGet: { path: /readyz, port: 8080 }
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 6
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+          resources:
+            requests: { cpu: 50m, memory: 96Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: control-ui
+  namespace: sunsteer
+spec:
+  # ClusterIP by default; switch to NodePort (and set a nodePort) or front it with
+  # an Ingress to reach the UI from outside the cluster.
+  type: ClusterIP
+  selector:
+    app: control-ui
+  ports:
+    - { name: http, port: 8080, targetPort: 8080 }

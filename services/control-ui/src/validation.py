@@ -23,16 +23,16 @@ def validate_settings(form: dict):
     clean uses control_config column names (run-times in SECONDS). If errors
     is non-empty, do NOT write."""
     e = {}
-    base = _num(form, "threshold_base_w", e, float, lo=0)
-    mn = _num(form, "threshold_min_w", e, float, lo=0)
-    off = _num(form, "threshold_off_w", e, float, lo=0)
-    on_delay = _num(form, "on_delay_cycles", e, int, lo=1)
-    off_delay = _num(form, "off_delay_cycles", e, int, lo=1)
-    run_min = _num(form, "min_runtime_min", e, float, lo=10)
-    off_min = _num(form, "min_offtime_min", e, float, lo=5)
-    ref = _num(form, "full_sun_ref_kwh", e, float, lo=1)
-    feed = _num(form, "feed_in_tariff_eur_kwh", e, float, lo=0)
-    grid = _num(form, "grid_price_eur_kwh", e, float, lo=0)
+    base = _num(form, "threshold_base_w", e, float, lo=0, hi=15000)
+    mn = _num(form, "threshold_min_w", e, float, lo=0, hi=15000)
+    off = _num(form, "threshold_off_w", e, float, lo=0, hi=15000)
+    on_delay = _num(form, "on_delay_cycles", e, int, lo=1, hi=1000)
+    off_delay = _num(form, "off_delay_cycles", e, int, lo=1, hi=1000)
+    run_min = _num(form, "min_runtime_min", e, float, lo=10, hi=720)
+    off_min = _num(form, "min_offtime_min", e, float, lo=5, hi=720)
+    ref = _num(form, "full_sun_ref_kwh", e, float, lo=1, hi=200)
+    feed = _num(form, "feed_in_tariff_eur_kwh", e, float, lo=0, hi=2)
+    grid = _num(form, "grid_price_eur_kwh", e, float, lo=0, hi=2)
     wp_nom = _num(form, "wp_nominal_power_w", e, float, lo=0, hi=20000)
 
     if base is not None and mn is not None and mn > base:

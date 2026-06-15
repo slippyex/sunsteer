@@ -1,17 +1,78 @@
 """vicare-exporter: poll ViCare -> Prometheus + TimescaleDB. READ-ONLY, budget-guarded."""
+import logging
 import os
 import time
 
 from prometheus_client import start_http_server
 
-from . import metrics, tsdb_writer, vicare_client, auth
+from . import auth, metrics, tsdb_writer, vicare_client
 from .extract import extract
 from .ratebudget import RateBudget, clamp_interval
 
-METRICS_PORT = int(os.environ.get("METRICS_PORT", "9125"))
+log = logging.getLogger(__name__)
+
+
+def _pos_int(name, default, hi=86400):
+    """Tolerant parse for port/cap envs: invalid, zero/negative or absurd values fall back
+    to the default so a typo can't crash the exporter at start."""
+    try:
+        v = int(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+    return v if 1 <= v <= hi else default
+
+
+METRICS_PORT = _pos_int("METRICS_PORT", 9125, hi=65535)
 POLL_S = clamp_interval(os.environ.get("VICARE_POLL_SECONDS", "300"))
-DAILY_CAP = int(os.environ.get("VICARE_DAILY_CAP", "1400"))
+DAILY_CAP = _pos_int("VICARE_DAILY_CAP", 1400, hi=100000)
 TOKEN_FILE = os.environ.get("VICARE_TOKEN_FILE", "/data/vicare_token.json")
+BUDGET_FILE = os.environ.get("VICARE_BUDGET_FILE", "/data/vicare_budget.json")
+
+
+def _is_rate_limit(e):
+    try:
+        from PyViCare.PyViCareUtils import PyViCareRateLimitError
+        if isinstance(e, PyViCareRateLimitError):
+            return True
+    except Exception:
+        pass
+    s = str(e).lower()
+    return "429" in s or "rate limit" in s or "ratelimit" in s
+
+
+def _is_invalid_credentials(e):
+    try:
+        from PyViCare.PyViCareUtils import PyViCareInvalidCredentialsError
+        if isinstance(e, PyViCareInvalidCredentialsError):
+            return True
+    except Exception:
+        pass
+    s = str(e).lower()
+    return "invalid credentials" in s
+
+
+def connect_with_retry(token_file, max_backoff=1800):
+    """Discover the ViCare device, retrying with backoff instead of crashing the process.
+    A 429 during the (pre-budget) discovery call must NOT exit -> restart -> re-discover in a
+    tight loop that hammers the API exactly while it's rate-limiting us."""
+    backoff = 0
+    while True:
+        try:
+            return auth.connect_device(token_file)
+        except Exception as e:
+            rate_limited = _is_rate_limit(e)
+            if rate_limited:
+                metrics.RATE_LIMITED.inc()
+            if _is_invalid_credentials(e):
+                # Permanent condition: backoff won't fix it. Surface it loudly + via a
+                # dedicated metric so it's distinguishable from transient errors, but keep
+                # the capped backoff instead of a hard crash-loop.
+                metrics.INVALID_CREDENTIALS.inc()
+                log.error("ViCare credentials rejected as invalid (%s). Fix VICARE_USER/"
+                          "VICARE_PASS/VICARE_CLIENT_ID; retrying with backoff.", e)
+            metrics.SCRAPE_ERRORS.labels("connect").inc()
+            backoff = max_backoff if rate_limited else min(backoff + POLL_S, max_backoff)
+            time.sleep(POLL_S + backoff)
 
 
 def run_cycle(device, conn, budget, now):
@@ -34,28 +95,28 @@ def run_cycle(device, conn, budget, now):
 
 def _db():
     return tsdb_writer.connect(
-        os.environ["DB_HOST"], int(os.environ.get("DB_PORT", "5432")),
+        os.environ["DB_HOST"], _pos_int("DB_PORT", 5432, hi=65535),
         os.environ["DB_NAME"], os.environ["DB_USER"], os.environ["DB_PASS"])
 
 
 def main():
     start_http_server(METRICS_PORT)
-    device = auth.connect_device(TOKEN_FILE)
+    device = connect_with_retry(TOKEN_FILE)
     conn = None
-    budget = RateBudget(cap=DAILY_CAP, window_s=86400)
+    budget = RateBudget(cap=DAILY_CAP, window_s=86400, persist_path=BUDGET_FILE)
     backoff = 0
     while True:
         try:
             conn = tsdb_writer.live_conn(conn, _db)  # reconnect across DB restarts
-            run_cycle(device, conn, budget, now=time.monotonic())
+            run_cycle(device, conn, budget, now=time.time())
             backoff = 0
         except Exception as e:
-            stage = "rate_limited" if "429" in str(e) else "cycle"
-            if stage == "rate_limited":
+            rate_limited = _is_rate_limit(e)
+            if rate_limited:
                 metrics.RATE_LIMITED.inc()
-            metrics.SCRAPE_ERRORS.labels(stage).inc()
+            metrics.SCRAPE_ERRORS.labels("rate_limited" if rate_limited else "cycle").inc()
             conn = None  # force reconnect next cycle
-            backoff = min(backoff + POLL_S, 1800)
+            backoff = 1800 if rate_limited else min(backoff + POLL_S, 1800)
         time.sleep(POLL_S + backoff)
 
 

@@ -1,5 +1,6 @@
 from src.tsdb_writer import aggregate_samples
 
+
 def test_aggregate_averages_power_and_takes_last_counters():
     samples = [
         {"import_w": 100, "export_w": 0, "surplus_w": -100, "l1_w": -100, "l2_w": 0, "l3_w": 0,

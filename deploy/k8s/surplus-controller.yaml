@@ -1,0 +1,95 @@
+# surplus-controller — the control loop: adaptive threshold -> hysteresis ->
+# switch the relay; fail-safe OFF on stale meter data.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: surplus-controller
+  namespace: sunsteer
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: surplus-controller
+  template:
+    metadata:
+      labels:
+        app: surplus-controller
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9123"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: surplus-controller
+          image: ghcr.io/slippyex/sunsteer/surplus-controller:0.3.0  # pinned; kustomize images: bumps it too
+          imagePullPolicy: IfNotPresent
+          env:
+            - { name: PYTHONDONTWRITEBYTECODE, value: "1" }   # readOnlyRootFilesystem
+            # The exporter pod is hostNetwork, so this could also be the node IP
+            # (http://<node-ip>:9121/state). The energy-exporter Service gives a
+            # stable cluster-DNS name that selects the hostNetwork pod -> use it.
+            - { name: EXPORTER_STATE_URL, value: "http://energy-exporter:9121/state" }
+            - { name: SHELLY_URL, value: "http://CHANGE_ME" } # Shelly relay base URL
+            - { name: METRICS_PORT, value: "9123" }
+            - { name: STATUS_PORT, value: "9124" }
+            # PV site for the forecast-based adaptive threshold.
+            - { name: PV_LAT, value: "CHANGE_ME" }
+            - { name: PV_LON, value: "CHANGE_ME" }
+            - { name: PV_TZ, value: "UTC" }
+            # Roof planes as JSON: [[declination_deg, azimuth_deg, kwp], ...]
+            # Azimuth: 0=south, -90=east, +90=west. Example single south-facing plane:
+            - { name: PV_PLANES, value: "[[30,0,5.0]]" }
+            - { name: DB_HOST, value: "timescaledb" }
+            - { name: DB_PORT, value: "5432" }
+            - { name: DB_NAME, value: "energy" }
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef: { name: sunsteer-secrets, key: DB_USER }
+            - name: DB_PASS
+              valueFrom:
+                secretKeyRef: { name: sunsteer-secrets, key: DB_PASS }
+          ports:
+            - { containerPort: 9123, name: metrics }
+            - { containerPort: 9124, name: status }
+          # /healthz is 503 unless the main loop beat recently -> restarts a hung loop.
+          livenessProbe:
+            httpGet: { path: /healthz, port: 9124 }
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /status, port: 9124 }
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 6
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 300m, memory: 192Mi }
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: surplus-controller
+  namespace: sunsteer
+spec:
+  selector:
+    app: surplus-controller
+  ports:
+    - { name: status, port: 9124, targetPort: 9124 }
+    - { name: metrics, port: 9123, targetPort: 9123 }

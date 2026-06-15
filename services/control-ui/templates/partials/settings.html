@@ -7,6 +7,7 @@
       <span>{{ label }}{% if suffix %} <span class="txt-dim">{{ suffix }}</span>{% endif %}</span>
       <input
         name="{{ name }}"
+        inputmode="decimal"
         value="{{ (form[name] if form is defined and form else value) }}"
       >
       {% if help %}<div class="h">{{ help }}</div>{% endif %}
@@ -62,6 +63,9 @@
     <button type="submit" class="sbtn">{{ t('save') }}</button>
     {% if saved is defined and saved %}
       <span class="txt-g" style="font-family:var(--mono);font-size:11px;">{{ t('saved') }}</span>
+    {% endif %}
+    {% if db_down is defined and db_down %}
+      <span class="note txt-r" style="font-family:var(--mono);font-size:11px;">⚠ {{ t('db_unreachable') }}</span>
     {% endif %}
   </div>
 

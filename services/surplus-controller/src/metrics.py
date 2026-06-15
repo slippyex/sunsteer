@@ -1,5 +1,5 @@
 """Controller Prometheus metrics."""
-from prometheus_client import Gauge, Counter
+from prometheus_client import Counter, Gauge
 
 MODE = Gauge("surplus_control_mode", "0=paused 1=manual 2=auto")
 RELAY_ON = Gauge("surplus_control_relay_on", "Commanded relay state (1=surplus mode on)")

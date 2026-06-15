@@ -18,5 +18,10 @@
     </div>
     {% endif %}
 
+    {# ── DB outage: nothing was persisted — say so instead of faking the applied mode ── #}
+    {% if db_down is defined and db_down %}
+    <div class="note txt-r" style="margin-top:6px;">⚠ {{ t('db_unreachable') }}</div>
+    {% endif %}
+
   </form>
 </section>

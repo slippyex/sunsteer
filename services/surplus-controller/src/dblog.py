@@ -1,5 +1,9 @@
 """Inserts into decision_log and solar_forecast (autocommit connection)."""
+import logging
+
 import psycopg2
+
+_log = logging.getLogger(__name__)
 
 
 def connect(host, port, db, user, password):
@@ -18,13 +22,21 @@ def live_conn(conn, connect_fn):
                 cur.execute("SELECT 1")
             return conn
     except Exception:
-        pass
+        # Held connection is dead (e.g. TimescaleDB restarted). Log the cause, then reconnect
+        # below — behaviour unchanged, just no longer silent.
+        _log.warning("DB connection ping failed — reconnecting", exc_info=True)
     try:
         if conn is not None:
             conn.close()
     except Exception:
         pass
-    return connect_fn()
+    try:
+        return connect_fn()
+    except Exception:
+        # Reconnect failed; re-raise so the caller's loop degrades as before, but log the cause
+        # so a persistent DB outage is visible instead of only counted.
+        _log.warning("DB (re)connect failed", exc_info=True)
+        raise
 
 
 def write_decision(conn, mode, surplus_w, eff_threshold, forecast_remaining,

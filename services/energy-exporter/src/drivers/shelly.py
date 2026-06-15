@@ -24,8 +24,8 @@ def fetch_status(base_url: str, switch_id: int = 0, timeout: float = 5.0):
         return None
 
 
-class ShellyRelay:
-    """Relay protocol (read side) for Shelly Gen2: polls Switch.GetStatus."""
+class ShellyRelayReader:
+    """Read-only relay status reader for Shelly Gen2 (Switch.GetStatus)."""
 
     def __init__(self, base_url, switch_id=0):
         self.base_url = base_url

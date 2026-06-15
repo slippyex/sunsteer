@@ -1,6 +1,6 @@
 import base64
+
 import pytest
-import src.sources as sources
 import src.app as appmod
 from fastapi.testclient import TestClient
 
@@ -264,3 +264,257 @@ def test_decisions_reason_translated(monkeypatch):
     c.cookies.set("lang", "en")
     r = c.get("/partials/decisions")
     assert "surplus above threshold" in r.text and ">ON" in r.text
+
+
+# ── write paths (settings / control) ─────────────────────────────────────────
+_VALID_SETTINGS = {
+    "threshold_base_w": "2500", "threshold_min_w": "1500", "threshold_off_w": "200",
+    "on_delay_cycles": "3", "off_delay_cycles": "3", "min_runtime_min": "30",
+    "min_offtime_min": "15", "full_sun_ref_kwh": "40", "feed_in_tariff_eur_kwh": "0.08",
+    "grid_price_eur_kwh": "0.30", "wp_nominal_power_w": "2000", "adapt_enabled": "on",
+}
+
+
+def test_post_settings_writes_validated_values(monkeypatch):
+    _patch(monkeypatch)
+    monkeypatch.setattr(appmod, "_db", lambda: type("C", (), {"close": lambda self: None})())
+    saved = {}
+    monkeypatch.setattr(appmod.sources, "save_settings", lambda conn, clean: saved.update(clean))
+    r = TestClient(appmod.app).post("/settings", data=dict(_VALID_SETTINGS))
+    assert r.status_code == 200
+    assert saved   # save_settings was called with cleaned values
+    assert saved["min_runtime_s"] == 1800   # 30 min -> seconds
+
+
+def test_post_settings_rejects_invalid_and_does_not_write(monkeypatch):
+    _patch(monkeypatch)
+    monkeypatch.setattr(appmod, "_db", lambda: type("C", (), {"close": lambda self: None})())
+    called = {"n": 0}
+    monkeypatch.setattr(appmod.sources, "save_settings",
+                        lambda conn, clean: called.__setitem__("n", called["n"] + 1))
+    # off >= min is invalid (validation rejects); rest of the form is complete.
+    bad = {**_VALID_SETTINGS, "threshold_off_w": "1500"}   # off == min -> reject
+    r = TestClient(appmod.app).post("/settings", data=bad)
+    assert r.status_code == 200
+    assert called["n"] == 0   # rejected -> no write
+
+
+def test_post_control_sets_mode(monkeypatch):
+    _patch(monkeypatch)
+    monkeypatch.setattr(appmod, "_db", lambda: type("C", (), {"close": lambda self: None})())
+    saved = {}
+    monkeypatch.setattr(appmod.sources, "save_mode",
+                        lambda conn, mode, manual_relay_on: saved.update(mode=mode))
+    r = TestClient(appmod.app).post("/control", data={"mode": "auto"})
+    assert r.status_code == 200 and saved.get("mode") == "auto"
+
+
+def test_index_degrades_when_db_down(monkeypatch):
+    _patch(monkeypatch)
+    def _boom():
+        raise RuntimeError("db down")
+    monkeypatch.setattr(appmod, "_db", _boom)
+    r = TestClient(appmod.app).get("/?lang=en")
+    assert r.status_code == 200   # degraded, not 500
+
+
+def test_partials_and_apis_degrade_when_db_down(monkeypatch):
+    _patch(monkeypatch)
+    def _boom():
+        raise RuntimeError("db down")
+    monkeypatch.setattr(appmod, "_db", _boom)
+    # controller_status / prom are independent of the DB; the DB-backed endpoints must degrade, not 500
+    c = TestClient(appmod.app)
+    for path in ("/partials/why", "/partials/balance", "/partials/decisions",
+                 "/api/effectiveness?window=7d", "/api/wp-timeline", "/api/wp-history?window=7d"):
+        assert c.get(path).status_code == 200, path
+
+
+def test_write_handlers_degrade_when_db_down(monkeypatch):
+    _patch(monkeypatch)
+    def _boom():
+        raise RuntimeError("db down")
+    monkeypatch.setattr(appmod, "_db", _boom)
+    c = TestClient(appmod.app)
+    assert c.post("/control", data={"mode": "auto"}).status_code == 200
+    # a valid settings form, DB down -> 200 (no write), not 500
+    valid = {"threshold_base_w": "2500", "threshold_min_w": "1500", "threshold_off_w": "200",
+             "on_delay_cycles": "3", "off_delay_cycles": "3", "min_runtime_min": "30",
+             "min_offtime_min": "15", "full_sun_ref_kwh": "40", "feed_in_tariff_eur_kwh": "0.08",
+             "grid_price_eur_kwh": "0.30", "wp_nominal_power_w": "2000"}
+    assert c.post("/settings", data=valid).status_code == 200
+
+
+# ── FIX 1: write handlers must surface a DB-unreachable warning ──────────────
+import src.i18n as i18nmod  # noqa: E402
+
+
+def _db_unreachable_msg(lang="en"):
+    return i18nmod.t(lang, "db_unreachable")
+
+
+def test_post_control_warns_when_db_down(monkeypatch):
+    _patch(monkeypatch)
+    def _boom():
+        raise RuntimeError("db down")
+    monkeypatch.setattr(appmod, "_db", _boom)
+    r = TestClient(appmod.app).post("/control?lang=en", data={"mode": "auto"})
+    assert r.status_code == 200
+    assert _db_unreachable_msg("en") in r.text
+
+
+def test_post_control_does_not_fake_applied_mode_when_db_down(monkeypatch):
+    # DB down: requested "auto" must NOT be highlighted as the active mode (no fake-applied
+    # state). The active highlight uses class "on" — none of the mode buttons should carry it.
+    _patch(monkeypatch)
+    def _boom():
+        raise RuntimeError("db down")
+    monkeypatch.setattr(appmod, "_db", _boom)
+    r = TestClient(appmod.app).post("/control?lang=en", data={"mode": "auto"})
+    assert r.status_code == 200
+    # the auto button must not be marked active
+    assert 'value="auto" class="on"' not in r.text
+
+
+def test_post_control_shows_applied_mode_on_happy_path(monkeypatch):
+    _patch(monkeypatch)
+    monkeypatch.setattr(appmod, "_db", lambda: type("C", (), {"close": lambda self: None})())
+    monkeypatch.setattr(appmod.sources, "save_mode", lambda conn, mode, manual_relay_on: None)
+    r = TestClient(appmod.app).post("/control?lang=en", data={"mode": "auto"})
+    assert r.status_code == 200
+    assert _db_unreachable_msg("en") not in r.text
+    assert 'value="auto" class="on"' in r.text
+
+
+def test_post_settings_warns_when_db_down(monkeypatch):
+    _patch(monkeypatch)
+    def _boom():
+        raise RuntimeError("db down")
+    monkeypatch.setattr(appmod, "_db", _boom)
+    r = TestClient(appmod.app).post("/settings?lang=en", data=dict(_VALID_SETTINGS))
+    assert r.status_code == 200
+    assert _db_unreachable_msg("en") in r.text
+
+
+def test_post_settings_saved_on_happy_path_no_warning(monkeypatch):
+    _patch(monkeypatch)
+    monkeypatch.setattr(appmod, "_db", lambda: type("C", (), {"close": lambda self: None})())
+    monkeypatch.setattr(appmod.sources, "save_settings", lambda conn, clean: None)
+    r = TestClient(appmod.app).post("/settings?lang=en", data=dict(_VALID_SETTINGS))
+    assert r.status_code == 200
+    assert _db_unreachable_msg("en") not in r.text
+    assert i18nmod.t("en", "saved") in r.text
+
+
+def test_db_unreachable_key_has_both_languages():
+    assert i18nmod.t("de", "db_unreachable") != "db_unreachable"
+    assert i18nmod.t("en", "db_unreachable") != "db_unreachable"
+    assert i18nmod.t("de", "db_unreachable") != i18nmod.t("en", "db_unreachable")
+
+
+# ── SECURITY FIX 1: ADMIN_PASS / ADMIN_USER reject the CHANGE_ME placeholder ──
+def test_admin_secret_treats_change_me_as_unset():
+    # a CHANGE_ME placeholder is a misconfiguration, not a credential -> treated as unset
+    assert appmod._admin_secret("CHANGE_ME") is None
+    assert appmod._admin_secret("prefix-CHANGE_ME-suffix") is None
+    assert appmod._admin_secret("") is None
+    assert appmod._admin_secret(None) is None
+    assert appmod._admin_secret("s3cret") == "s3cret"
+
+
+def test_app_locked_when_admin_pass_is_change_me(monkeypatch):
+    # with ADMIN_PASS=CHANGE_ME the UI must be fail-closed (503), not accept "CHANGE_ME"
+    monkeypatch.setattr(appmod, "ADMIN_PASS", appmod._admin_secret("CHANGE_ME"))
+    monkeypatch.setattr(appmod, "_basic_ok", _REAL_BASIC_OK)
+    assert TestClient(appmod.app).get("/partials/status").status_code == 503
+
+
+def test_app_locked_when_admin_user_is_change_me(monkeypatch):
+    # an ADMIN_USER left at CHANGE_ME locks the whole UI too (treat as unset)
+    monkeypatch.setattr(appmod, "ADMIN_PASS", appmod._admin_secret("CHANGE_ME"))
+    monkeypatch.setattr(appmod, "ADMIN_USER", appmod._admin_secret("admin_CHANGE_ME"))
+    monkeypatch.setattr(appmod, "_basic_ok", _REAL_BASIC_OK)
+    assert TestClient(appmod.app).get("/partials/status").status_code == 503
+
+
+# ── SECURITY FIX 2: CSRF / Origin check on state-changing POSTs ───────────────
+def test_post_rejects_mismatching_origin(monkeypatch):
+    _patch(monkeypatch)
+    monkeypatch.setattr(appmod, "_db", lambda: type("C", (), {"close": lambda self: None})())
+    monkeypatch.setattr(appmod.sources, "save_mode", lambda *a, **k: None)
+    c = TestClient(appmod.app)
+    r = c.post("/control", data={"mode": "auto"},
+               headers={"Origin": "http://evil.example"})
+    assert r.status_code == 403
+
+
+def test_post_allows_matching_origin(monkeypatch):
+    _patch(monkeypatch)
+    monkeypatch.setattr(appmod, "_db", lambda: type("C", (), {"close": lambda self: None})())
+    saved = {}
+    monkeypatch.setattr(appmod.sources, "save_mode",
+                        lambda conn, mode, manual_relay_on: saved.update(mode=mode))
+    c = TestClient(appmod.app)
+    # TestClient default host is testserver -> a matching Origin must pass
+    r = c.post("/control", data={"mode": "auto"},
+               headers={"Origin": "http://testserver"})
+    assert r.status_code == 200 and saved.get("mode") == "auto"
+
+
+def test_post_allows_no_origin(monkeypatch):
+    # curl/scripts/non-browser send no Origin -> allowed (existing tests rely on this)
+    _patch(monkeypatch)
+    monkeypatch.setattr(appmod, "_db", lambda: type("C", (), {"close": lambda self: None})())
+    monkeypatch.setattr(appmod.sources, "save_mode", lambda *a, **k: None)
+    r = TestClient(appmod.app).post("/control", data={"mode": "auto"})
+    assert r.status_code == 200
+
+
+def test_post_rejects_mismatching_referer(monkeypatch):
+    _patch(monkeypatch)
+    monkeypatch.setattr(appmod, "_db", lambda: type("C", (), {"close": lambda self: None})())
+    monkeypatch.setattr(appmod.sources, "save_mode", lambda *a, **k: None)
+    c = TestClient(appmod.app)
+    r = c.post("/control", data={"mode": "auto"},
+               headers={"Referer": "http://evil.example/x"})
+    assert r.status_code == 403
+
+
+def test_post_allows_env_allowed_origin(monkeypatch):
+    _patch(monkeypatch)
+    monkeypatch.setattr(appmod, "_db", lambda: type("C", (), {"close": lambda self: None})())
+    monkeypatch.setattr(appmod.sources, "save_mode", lambda *a, **k: None)
+    monkeypatch.setattr(appmod, "ALLOWED_ORIGIN", "proxy.example")
+    c = TestClient(appmod.app)
+    r = c.post("/control", data={"mode": "auto"},
+               headers={"Origin": "https://proxy.example"})
+    assert r.status_code == 200
+
+
+def test_norm_origin_accepts_full_url_and_bare_host():
+    # Documented form is a full URL; a bare host[:port] must also work. Both reduce to the
+    # host[:port] that the Origin/Referer check compares against.
+    assert appmod._norm_origin("https://sunsteer.example.com") == "sunsteer.example.com"
+    assert appmod._norm_origin("https://sunsteer.example.com:8443") == "sunsteer.example.com:8443"
+    assert appmod._norm_origin("sunsteer.example.com") == "sunsteer.example.com"
+    assert appmod._norm_origin("") is None
+    assert appmod._norm_origin(None) is None
+
+
+def test_post_allows_full_url_allowed_origin(monkeypatch):
+    # Regression: ALLOWED_ORIGIN set to the documented full-URL form must accept a matching
+    # cross-host Origin (previously compared a full URL against a bare host -> 403).
+    _patch(monkeypatch)
+    monkeypatch.setattr(appmod, "_db", lambda: type("C", (), {"close": lambda self: None})())
+    monkeypatch.setattr(appmod.sources, "save_mode", lambda *a, **k: None)
+    monkeypatch.setattr(appmod, "ALLOWED_ORIGIN", appmod._norm_origin("https://proxy.example"))
+    c = TestClient(appmod.app)
+    r = c.post("/control", data={"mode": "auto"}, headers={"Origin": "https://proxy.example"})
+    assert r.status_code == 200
+
+
+def test_pos_int_clamps_bad_db_port(monkeypatch):
+    monkeypatch.setenv("X", "abc"); assert appmod._pos_int("X", 5432) == 5432
+    monkeypatch.setenv("X", "0"); assert appmod._pos_int("X", 5432) == 5432
+    monkeypatch.setenv("X", "5432"); assert appmod._pos_int("X", 1) == 5432
+    monkeypatch.delenv("X", raising=False); assert appmod._pos_int("X", 5432) == 5432

@@ -1,5 +1,7 @@
 import struct
+
 from src.sma_decoder import decode_em_telegram
+
 
 def build_telegram(actuals, counters, serial=1234567):
     # 28-byte header: "SMA\0" + filler to offset 20, serial at 20..24, filler to 28

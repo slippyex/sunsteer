@@ -40,6 +40,16 @@ def test_validate_env_mock_meter_still_needs_db(monkeypatch):
     assert "DB_HOST" in str(e.value) and "SHM_HOST" not in str(e.value)
 
 
+def test_validate_env_rejects_change_me_placeholder(monkeypatch):
+    monkeypatch.delenv("METER_DRIVER", raising=False)
+    for k, v in REQUIRED.items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setenv("SHELLY_URL", "http://CHANGE_ME")   # unsubstituted example manifest
+    with pytest.raises(SystemExit) as e:
+        M.validate_env()
+    assert "SHELLY_URL" in str(e.value)
+
+
 def test_validate_env_unknown_meter_driver_fails_fast(monkeypatch):
     for k in REQUIRED:
         monkeypatch.delenv(k, raising=False)
@@ -47,3 +57,13 @@ def test_validate_env_unknown_meter_driver_fails_fast(monkeypatch):
     with pytest.raises(SystemExit) as e:
         M.validate_env()
     assert "bogus" in str(e.value) and "sma_shm" in str(e.value)
+
+
+def test_pos_int_clamps_bad_values(monkeypatch):
+    # Bad cadence/sleep values must fall back to the default, never crash or sleep(0).
+    monkeypatch.setenv("X", "abc"); assert M._pos_int("X", 60) == 60
+    monkeypatch.setenv("X", "0"); assert M._pos_int("X", 60) == 60
+    monkeypatch.setenv("X", "-5"); assert M._pos_int("X", 10) == 10
+    monkeypatch.setenv("X", "999999"); assert M._pos_int("X", 60) == 60
+    monkeypatch.setenv("X", "30"); assert M._pos_int("X", 60) == 30
+    monkeypatch.delenv("X", raising=False); assert M._pos_int("X", 42) == 42

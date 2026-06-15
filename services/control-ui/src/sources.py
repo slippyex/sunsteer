@@ -1,11 +1,53 @@
-"""Data access: Prometheus (live) + TimescaleDB (config/log). All read-tolerant:
-any failure returns a safe empty/None so the UI degrades instead of 500-ing."""
+"""Data access: Prometheus (live) + TimescaleDB (config/log). All READERS are tolerant:
+any failure — including a None/dead connection — returns a safe empty/None, so the UI
+degrades instead of 500-ing. WRITERS (save_settings/save_mode) require a live connection
+and are intentionally NOT tolerant: a write to a dead DB must not silently "succeed"
+(the caller skips the write when the connection is unavailable)."""
 import json
+import logging
+import os
 import time
 import urllib.parse
 import urllib.request
 
 import psycopg2
+
+log = logging.getLogger(__name__)
+
+# Relay/heatpump rows are one DB row per exporter flush. The exporter's TSDB_FLUSH_SECONDS
+# write cadence (default 60 s) sets how many rows accumulate per real minute, so it drives
+# the row-count -> runtime/kWh conversion. Read it once and derive the SQL divisors from it
+# instead of hardcoding the F=60 case (a controller wires TSDB_FLUSH_SECONDS into the env).
+def _flush_seconds(raw) -> int:
+    """Parse TSDB_FLUSH_SECONDS into a safe positive cadence. A missing, non-numeric,
+    zero/negative or absurd value falls back to the 60 s default — the UI must never crash
+    at import or divide by zero just because the env is fat-fingered."""
+    try:
+        v = int(raw)
+    except (TypeError, ValueError):
+        return 60
+    return v if 1 <= v <= 3600 else 60
+
+
+TSDB_FLUSH_SECONDS = _flush_seconds(os.environ.get("TSDB_FLUSH_SECONDS", "60"))
+
+
+def _runtime_hours_divisor(flush_s: int) -> float:
+    """count(rows) / divisor = runtime hours, for a flush cadence of flush_s seconds.
+    F=60 -> 60.0 (one row/min, backward compatible)."""
+    return 3600.0 / flush_s
+
+
+def _kwh_divisor(flush_s: int) -> float:
+    """sum(watts) / divisor = kWh, for a flush cadence of flush_s seconds.
+    F=60 -> 60000.0 (backward compatible)."""
+    return 3_600_000.0 / flush_s
+
+
+# Pre-computed divisors injected into the runtime/kWh SQL. Validated ints derived above —
+# never raw user input, so f-string interpolation into SQL is safe.
+FLUSH_DIVISOR_HOURS = _runtime_hours_divisor(TSDB_FLUSH_SECONDS)
+FLUSH_DIVISOR_KWH = _kwh_divisor(TSDB_FLUSH_SECONDS)
 
 
 def parse_prom_value(resp: dict):
@@ -27,7 +69,8 @@ def prom_query(base_url, expr, timeout=5.0):
     try:
         with urllib.request.urlopen(url, timeout=timeout) as r:
             return parse_prom_value(json.load(r))
-    except Exception:
+    except Exception as e:
+        log.warning("prom_query(%s): %s", expr, e)
         return None
 
 
@@ -42,7 +85,8 @@ def prom_query_range(base_url, expr, start, end, step, timeout=8.0):
         if not res:
             return []
         return [[float(ts), float(v)] for ts, v in res[0]["values"]]
-    except Exception:
+    except Exception as e:
+        log.warning("prom_query_range(%s): %s", expr, e)
         return []
 
 
@@ -59,10 +103,14 @@ _CONFIG_COLS = ["mode", "manual_relay_on", "threshold_base_w", "threshold_min_w"
 
 
 def load_config(conn):
-    with conn.cursor() as cur:
-        cur.execute(f"SELECT {', '.join(_CONFIG_COLS)} FROM control_config WHERE id = 1")
-        row = cur.fetchone()
-    return dict(zip(_CONFIG_COLS, row)) if row else {}
+    try:
+        with conn.cursor() as cur:
+            cur.execute(f"SELECT {', '.join(_CONFIG_COLS)} FROM control_config WHERE id = 1")
+            row = cur.fetchone()
+        return dict(zip(_CONFIG_COLS, row, strict=False)) if row else {}
+    except Exception as e:
+        log.warning("load_config: %s", e)
+        return {}
 
 
 def save_settings(conn, clean: dict):
@@ -84,27 +132,31 @@ def recent_decisions(conn, limit=30):
     the Shelly 60s auto-off watchdog (e.g. during a deploy) or the SMA/ennexOS dual-control —
     still show up (the controller's decision_log only records its own switches), so there are no
     invisible 'two EIN in a row' gaps. Unmatched transitions are labelled 'extern'."""
-    with conn.cursor() as cur:
-        cur.execute(
-            "WITH trans AS ("
-            "  SELECT time, relay_on FROM ("
-            "    SELECT time, relay_on, lag(relay_on) OVER (ORDER BY time) prev"
-            "    FROM heatpump WHERE time > now() - interval '7 days') s"
-            "  WHERE relay_on IS DISTINCT FROM prev AND prev IS NOT NULL) "
-            "SELECT t.time, d.mode, d.surplus_w, d.effective_threshold_w, t.relay_on, d.reason "
-            "FROM trans t "
-            "LEFT JOIN LATERAL ("
-            "  SELECT mode, surplus_w, effective_threshold_w, reason FROM decision_log dl "
-            "  WHERE dl.relay_target = t.relay_on "
-            "    AND dl.time BETWEEN t.time - interval '90 seconds' AND t.time + interval '90 seconds' "
-            "  ORDER BY abs(extract(epoch FROM dl.time - t.time)) LIMIT 1) d ON true "
-            "ORDER BY t.time DESC LIMIT %s", (limit,))
-        rows = cur.fetchall()
-    return [{"time": t, "mode": m or "auto",
-             "surplus_w": s, "threshold_w": th,
-             "action": "switched_on" if relay_on else "switched_off",
-             "reason": r or "extern (Watchdog/SMA)"}
-            for (t, m, s, th, relay_on, r) in rows]
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "WITH trans AS ("
+                "  SELECT time, relay_on FROM ("
+                "    SELECT time, relay_on, lag(relay_on) OVER (ORDER BY time) prev"
+                "    FROM heatpump WHERE time > now() - interval '7 days') s"
+                "  WHERE relay_on IS DISTINCT FROM prev AND prev IS NOT NULL) "
+                "SELECT t.time, d.mode, d.surplus_w, d.effective_threshold_w, t.relay_on, d.reason "
+                "FROM trans t "
+                "LEFT JOIN LATERAL ("
+                "  SELECT mode, surplus_w, effective_threshold_w, reason FROM decision_log dl "
+                "  WHERE dl.relay_target = t.relay_on "
+                "    AND dl.time BETWEEN t.time - interval '90 seconds' AND t.time + interval '90 seconds' "
+                "  ORDER BY abs(extract(epoch FROM dl.time - t.time)) LIMIT 1) d ON true "
+                "ORDER BY t.time DESC LIMIT %s", (limit,))
+            rows = cur.fetchall()
+        return [{"time": t, "mode": m or "auto",
+                 "surplus_w": s, "threshold_w": th,
+                 "action": "switched_on" if relay_on else "switched_off",
+                 "reason": r or "extern (Watchdog/SMA)"}
+                for (t, m, s, th, relay_on, r) in rows]
+    except Exception as e:
+        log.warning("recent_decisions: %s", e)
+        return []
 
 
 def solar_forecast_today(conn):
@@ -114,7 +166,8 @@ def solar_forecast_today(conn):
             cur.execute("SELECT expected_kwh_day, expected_kwh_remaining FROM solar_forecast "
                         "WHERE forecast_date = current_date ORDER BY time DESC LIMIT 1")
             row = cur.fetchone()
-    except Exception:
+    except Exception as e:
+        log.warning("solar_forecast_today: %s", e)
         return {}
     if not row:
         return {}
@@ -127,17 +180,18 @@ _EFF_WINDOWS = {"7d": 6, "30d": 29, "90d": 89, "365d": 364}
 
 def effectiveness_daily(conn, window, nominal_w, grid_price, feed_in):
     """Per-day WP self-used estimate over the window incl. today. Run-time from the raw heatpump
-    table (count of relay_on rows / 60, 1-min cadence) × nominal power. Tolerant -> [] on error."""
+    table (count of relay_on rows / flush-cadence divisor) × nominal power. Tolerant -> []."""
     days_back = _EFF_WINDOWS.get(window, _EFF_WINDOWS["7d"])
     try:
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT date_trunc('day', time) AS day, "
-                "       count(*) FILTER (WHERE relay_on)/60.0 AS runtime_h "
+                f"       count(*) FILTER (WHERE relay_on)/{FLUSH_DIVISOR_HOURS} AS runtime_h "
                 "FROM heatpump WHERE time >= date_trunc('day', now()) - %s::interval "
                 "GROUP BY day ORDER BY day", (f"{days_back} days",))
             rows = cur.fetchall()
-    except Exception:
+    except Exception as e:
+        log.warning("effectiveness_daily: %s", e)
         return []
     nominal_kw = (nominal_w or 0) / 1000.0
     diff = (grid_price or 0) - (feed_in or 0)
@@ -177,7 +231,8 @@ def _wp_temps(conn, interval, bucket):
                 "GROUP BY t ORDER BY t", (bucket, interval))
             return [{"t": t.isoformat(), "dhw": _num(a), "buffer": _num(b),
                      "supply": _num(c), "outside": _num(d)} for t, a, b, c, d in cur.fetchall()]
-    except Exception:
+    except Exception as e:
+        log.warning("_wp_temps: %s", e)
         return []
 
 
@@ -198,7 +253,8 @@ def _wp_run(conn, interval, bucket):
             onf = {t.isoformat(): _num(v) for t, v in cur.fetchall()}
         return [{"t": k, "surplus": surplus.get(k), "on_frac": onf.get(k)}
                 for k in sorted(set(surplus) | set(onf))]
-    except Exception:
+    except Exception as e:
+        log.warning("_wp_run: %s", e)
         return []
 
 
@@ -212,7 +268,8 @@ def _wp_comp(conn, interval, bucket):
                 "FROM heatpump_vicare WHERE time > now() - %s::interval GROUP BY t ORDER BY t",
                 (bucket, interval))
             rows = cur.fetchall()
-    except Exception:
+    except Exception as e:
+        log.warning("_wp_comp: %s", e)
         return []
     out, prev = [], None
     for t, rps, starts_cum in rows:
@@ -232,7 +289,7 @@ def _wp_eff(conn, interval, nominal_w):
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT date_trunc('day', time) AS day, count(*) FILTER (WHERE relay_on)/60.0 "
+                f"SELECT date_trunc('day', time) AS day, count(*) FILTER (WHERE relay_on)/{FLUSH_DIVISOR_HOURS} "
                 "FROM heatpump WHERE time > now() - %s::interval GROUP BY day ORDER BY day",
                 (interval,))
             run = {d.date(): float(h or 0) for d, h in cur.fetchall()}
@@ -241,7 +298,8 @@ def _wp_eff(conn, interval, nominal_w):
                 "FROM heatpump_vicare WHERE time > now() - %s::interval GROUP BY day ORDER BY day",
                 (interval,))
             scop = {d.date(): _num(s) for d, s in cur.fetchall()}
-    except Exception:
+    except Exception as e:
+        log.warning("_wp_eff: %s", e)
         return []
     nominal_kw = (nominal_w or 0) / 1000.0
     return [{"day": d.strftime("%d.%m"), "kwh": round(run.get(d, 0) * nominal_kw, 2),
@@ -263,6 +321,9 @@ def wp_savings(conn, window, nominal_w, grid_price, feed_in):
     try:
         with conn.cursor() as cur:
             cur.execute(
+                # The CTEs re-bucket into 1-minute buckets first, so the outer sum is over
+                # watt-MINUTES regardless of the exporter flush cadence -> divisor is the
+                # cadence-independent 60000.0 (60 min/h × 1000 W/kW), NOT FLUSH_DIVISOR_KWH.
                 "WITH wp AS (SELECT time_bucket('1 minute'::interval, time) m, bool_or(relay_on) on_ "
                 "  FROM heatpump WHERE time > now() - %s::interval GROUP BY m), "
                 "sm AS (SELECT time_bucket('1 minute'::interval, time) m, avg(surplus_w) surplus "
@@ -273,7 +334,8 @@ def wp_savings(conn, window, nominal_w, grid_price, feed_in):
                 "FROM wp JOIN sm USING (m) GROUP BY day ORDER BY day",
                 (interval, interval, n, n, n, n, n))
             rows = cur.fetchall()
-    except Exception:
+    except Exception as e:
+        log.warning("wp_savings: %s", e)
         return []
     diff = (grid_price or 0) - (feed_in or 0)
     out, cum = [], 0.0
@@ -298,7 +360,8 @@ def wp_timeline_today(conn, start_epoch):
                 "FROM heatpump WHERE time >= to_timestamp(%s) GROUP BY t ORDER BY t",
                 (start_epoch,))
             return [[int(t), int(v)] for t, v in cur.fetchall()]
-    except Exception:
+    except Exception as e:
+        log.warning("wp_timeline_today: %s", e)
         return []
 
 
@@ -311,7 +374,8 @@ def _wp_strings(conn, interval, bucket):
                 "round(avg(dc_power_b_w)::numeric,0) FROM energy_meter WHERE time > now() - %s::interval "
                 "GROUP BY t ORDER BY t", (bucket, interval))
             return [{"t": t.isoformat(), "a": _num(a), "b": _num(b)} for t, a, b in cur.fetchall()]
-    except Exception:
+    except Exception as e:
+        log.warning("_wp_strings: %s", e)
         return []
 
 
@@ -394,7 +458,8 @@ def open_meteo(lat, lon, tz, ttl=900, timeout=8.0):
             parsed = parse_open_meteo(json.load(r))
         _meteo_cache.update(ts=now, data=parsed)
         return parsed
-    except Exception:
+    except Exception as e:
+        log.warning("open_meteo: %s", e)
         return _meteo_cache["data"]
 
 
@@ -403,7 +468,8 @@ def controller_status(url, timeout=4.0):
     try:
         with urllib.request.urlopen(url, timeout=timeout) as r:
             return json.load(r)
-    except Exception:
+    except Exception as e:
+        log.warning("controller_status: %s", e)
         return None
 
 
@@ -418,10 +484,10 @@ def today_summary(conn):
 
     WP energy is NOT measured (the Shelly is an SG-Ready signal contact, power_w==0),
     so we return relay run-time only; the caller turns it into estimated kWh via
-    wp_nominal_power_w. Run-time counts heatpump rows where relay_on, assuming the
-    exporter's 1-minute write cadence (TSDB_FLUSH_SECONDS=60) — the /60 skews if that
-    interval changes. The production/export/import counters are cadence-independent."""
-    sql = """
+    wp_nominal_power_w. Run-time counts heatpump rows where relay_on; the divisor is
+    derived from the exporter's flush cadence (TSDB_FLUSH_SECONDS) so it stays correct if
+    that interval changes. The production/export/import counters are cadence-independent."""
+    sql = f"""
       SELECT
         (SELECT max(production_kwh_total)-min(production_kwh_total) FROM energy_meter
            WHERE production_kwh_total IS NOT NULL AND time >= date_trunc('day', now())) AS prod_kwh,
@@ -429,15 +495,16 @@ def today_summary(conn):
            WHERE time >= date_trunc('day', now())) AS export_kwh,
         (SELECT max(import_kwh_total)-min(import_kwh_total) FROM energy_meter
            WHERE time >= date_trunc('day', now())) AS import_kwh,
-        (SELECT coalesce(count(*) FILTER (WHERE relay_on),0)/60.0 FROM heatpump
+        (SELECT coalesce(count(*) FILTER (WHERE relay_on),0)/{FLUSH_DIVISOR_HOURS} FROM heatpump
            WHERE time >= date_trunc('day', now())) AS wp_runtime_h,
-        (SELECT coalesce(count(*) FILTER (WHERE relay_on),0)/60.0 FROM heatpump) AS wp_runtime_total_h
+        (SELECT coalesce(count(*) FILTER (WHERE relay_on),0)/{FLUSH_DIVISOR_HOURS} FROM heatpump) AS wp_runtime_total_h
     """
     try:
         with conn.cursor() as cur:
             cur.execute(sql)
             prod, exp, imp, runtime, runtime_total = cur.fetchone()
-    except Exception:
+    except Exception as e:
+        log.warning("today_summary: %s", e)
         return dict(_EMPTY_SUMMARY)
     prod = float(prod or 0)
     sc = ((prod - float(exp or 0)) / prod) if prod > 0 else 0.0

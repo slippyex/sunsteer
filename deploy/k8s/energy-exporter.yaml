@@ -1,0 +1,97 @@
+# energy-exporter — reads the grid meter (SMA Speedwire multicast) + relay state,
+# serves /state + /metrics, writes TimescaleDB.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: energy-exporter
+  namespace: sunsteer
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: energy-exporter
+  template:
+    metadata:
+      labels:
+        app: energy-exporter
+    spec:
+      # hostNetwork is REQUIRED: the SMA Speedwire multicast (239.12.255.254:9522)
+      # does not cross the pod-network NAT. The pod must sit on the same L2 as the
+      # SHM. dnsPolicy keeps cluster DNS (timescaledb) resolvable on host network.
+      # NOTE: hostNetwork + the hostPorts below expose /metrics (9120) and /state (9121)
+      # on the NODE's IP. They carry no secrets, but /state is live control telemetry —
+      # restrict 9120/9121 to your monitoring subnet with a HOST firewall (iptables/nftables/
+      # ufw). A Kubernetes NetworkPolicy does NOT apply to hostNetwork pods, so it can't
+      # restrict these ports. You can also set STATE_BIND (below) to bind /state to one IP.
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: energy-exporter
+          image: ghcr.io/slippyex/sunsteer/energy-exporter:0.3.0  # pinned; kustomize images: bumps it too
+          imagePullPolicy: IfNotPresent
+          env:
+            - { name: PYTHONDONTWRITEBYTECODE, value: "1" }   # readOnlyRootFilesystem
+            # sma_shm reads a real SHM; set to "mock" for hardware-free testing.
+            - { name: METER_DRIVER, value: "sma_shm" }
+            - { name: SHM_HOST, value: "CHANGE_ME" }          # IP of the SMA Home Manager
+            - { name: SHELLY_URL, value: "http://CHANGE_ME" } # Shelly relay base URL
+            - { name: METRICS_PORT, value: "9120" }
+            - { name: STATE_PORT, value: "9121" }
+            # Bind /state to one IP instead of all interfaces (defence in depth; carries no
+            # secrets). Leave unset for all interfaces. - { name: STATE_BIND, value: "10.0.0.5" }
+            - { name: DB_HOST, value: "timescaledb" }
+            - { name: DB_PORT, value: "5432" }
+            - { name: DB_NAME, value: "energy" }
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef: { name: sunsteer-secrets, key: DB_USER }
+            - name: DB_PASS
+              valueFrom:
+                secretKeyRef: { name: sunsteer-secrets, key: DB_PASS }
+          ports:
+            - { containerPort: 9120, hostPort: 9120, name: metrics }
+            - { containerPort: 9121, hostPort: 9121, name: state }
+          livenessProbe:
+            httpGet: { path: /state, port: 9121 }
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /state, port: 9121 }
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 6
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 300m, memory: 192Mi }
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: energy-exporter
+  namespace: sunsteer
+spec:
+  # The pod is hostNetwork (pod IP = node IP); the Service still gives the
+  # controller a stable cluster-DNS name to read /state instead of a node IP.
+  selector:
+    app: energy-exporter
+  ports:
+    - { name: state, port: 9121, targetPort: 9121 }
+    - { name: metrics, port: 9120, targetPort: 9120 }

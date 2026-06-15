@@ -40,3 +40,35 @@ groups:
         annotations:
           summary: "Shelly relay unreachable for 10 minutes"
           description: "Polling the relay fails (WiFi dropouts?). Switching may be unreliable; the Shelly auto-off acts as the safety net."
+
+      - alert: ShellyWriteFailures
+        expr: increase(surplus_control_shelly_write_errors_total[10m]) > 3
+        for: 0m
+        labels: { severity: warning }
+        annotations:
+          summary: "Controller commanded the relay but writes are failing"
+          description: "Switch commands to the Shelly are erroring (reachable for reads but rejecting writes, or RPC errors). The heat pump may not follow the controller."
+
+      - alert: ControllerLoopErrors
+        expr: increase(surplus_control_loop_errors_total[15m]) > 5
+        for: 0m
+        labels: { severity: warning }
+        annotations:
+          summary: "surplus-controller loop is throwing repeatedly"
+          description: "Recurring exceptions in the control loop (DB/config/decision-log). The loop survives each one but a sustained rate means something is wrong (check {{ $labels.stage }})."
+
+      - alert: ExporterPollErrors
+        expr: increase(energy_exporter_poll_errors_total[15m]) > 5
+        for: 0m
+        labels: { severity: warning }
+        annotations:
+          summary: "energy-exporter is failing to poll a source"
+          description: "Repeated read failures from {{ $labels.source }} (relay state or inverter Modbus). Meter readings may be unaffected, but relay-state/telemetry could be stale."
+
+      - alert: ViCareExporterStale
+        expr: time() - vicare_last_success_timestamp_seconds > 3600
+        for: 0m
+        labels: { severity: warning }
+        annotations:
+          summary: "ViCare telemetry has not updated for over an hour"
+          description: "The optional heat-pump telemetry exporter has not polled successfully (auth expired, rate-limited, or down). Control is unaffected; dashboards go stale."

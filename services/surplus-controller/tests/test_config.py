@@ -1,4 +1,5 @@
-from src.config import clamp_config, DEFAULTS
+from src.config import DEFAULTS, clamp_config
+
 
 def test_defaults_pass_through_unchanged():
     c = clamp_config(dict(DEFAULTS))
@@ -20,3 +21,19 @@ def test_negative_thresholds_clamped_to_zero():
 def test_mode_invalid_falls_back_to_paused():
     c = clamp_config({**DEFAULTS, "mode": "bogus"})
     assert c["mode"] == "paused"
+
+
+def test_none_numeric_field_degrades_to_default():
+    # a NULL column in control_config must not poison hot-reload of the WHOLE config.
+    c = clamp_config({**DEFAULTS, "threshold_base_w": None})
+    assert c["threshold_base_w"] == DEFAULTS["threshold_base_w"]
+
+
+def test_none_int_field_degrades_to_default():
+    c = clamp_config({**DEFAULTS, "min_runtime_s": None})
+    assert c["min_runtime_s"] == DEFAULTS["min_runtime_s"]
+
+
+def test_off_below_min_invariant_holds_for_normal_values():
+    c = clamp_config({**DEFAULTS, "threshold_min_w": 1500, "threshold_off_w": 1490})
+    assert c["threshold_off_w"] < c["threshold_min_w"]

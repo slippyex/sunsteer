@@ -1,0 +1,59 @@
+# db-migrate — applies db/migrations/*.sql in order, the Kubernetes equivalent of the
+# Compose db-migrate one-shot. Runs on `kubectl apply -k .`; the app Deployments tolerate
+# a brief crashloop until it completes. Migrations are idempotent, so a re-run is safe.
+#
+# The migrations come from the `sunsteer-migrations` ConfigMap, created manually from
+# db/migrations/ before `apply -k` (see README — kustomize can't read files above its dir).
+# UPGRADE that adds a migration: refresh that ConfigMap, then recreate this Job
+# (README "Schema migrations"); a completed Job's pod template is immutable.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migrate
+  namespace: sunsteer
+spec:
+  backoffLimit: 20             # retry while TimescaleDB is still coming up
+  ttlSecondsAfterFinished: 600 # auto-delete 10 min after success, so a later `apply -k`
+                               # (e.g. on the next upgrade) recreates it without a manual delete
+  template:
+    metadata:
+      labels:
+        app: db-migrate
+    spec:
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: db-migrate
+          image: timescale/timescaledb@sha256:22e8a5ae7aef121d1537afe946dd7cc5deeeb63ab36ce19849d671bd3b663509  # latest-pg16, digest-pinned
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              for f in $(find /migrations -name '*.sql' | sort); do
+                echo "applying $f"
+                psql -h timescaledb -U "$PGUSER" -d "$PGDATABASE" -v ON_ERROR_STOP=1 -f "$f" || exit 1
+              done
+              echo "migrations done"
+          env:
+            - { name: PGDATABASE, value: "energy" }
+            - { name: HOME, value: "/tmp" }
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef: { name: sunsteer-secrets, key: DB_USER }
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef: { name: sunsteer-secrets, key: DB_PASS }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: migrations, mountPath: /migrations, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: migrations
+          configMap: { name: sunsteer-migrations }
+        - name: tmp
+          emptyDir: {}

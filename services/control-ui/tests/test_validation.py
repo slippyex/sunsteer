@@ -1,5 +1,6 @@
 from src.validation import validate_settings
 
+
 def base_form():
     return {"threshold_base_w": "2500", "threshold_min_w": "1500", "threshold_off_w": "200",
             "on_delay_cycles": "3", "off_delay_cycles": "3",
@@ -45,3 +46,28 @@ def test_non_numeric_is_error():
     form = base_form(); form["threshold_base_w"] = "abc"
     clean, errors = validate_settings(form)
     assert "threshold_base_w" in errors
+
+def test_threshold_upper_bound():
+    form = base_form(); form["threshold_base_w"] = "9000000000"
+    clean, errors = validate_settings(form)
+    assert "threshold_base_w" in errors and clean == {}
+
+def test_delay_upper_bound():
+    form = base_form(); form["on_delay_cycles"] = "100000"
+    clean, errors = validate_settings(form)
+    assert "on_delay_cycles" in errors
+
+def test_runtime_upper_bound():
+    form = base_form(); form["min_runtime_min"] = "100000"
+    clean, errors = validate_settings(form)
+    assert "min_runtime_min" in errors
+
+def test_tariff_upper_bound():
+    form = base_form(); form["grid_price_eur_kwh"] = "999"
+    clean, errors = validate_settings(form)
+    assert "grid_price_eur_kwh" in errors
+
+def test_full_sun_ref_upper_bound():
+    form = base_form(); form["full_sun_ref_kwh"] = "99999"
+    clean, errors = validate_settings(form)
+    assert "full_sun_ref_kwh" in errors

@@ -4,6 +4,7 @@ __pycache__/
 .venv/
 venv/
 .env
+deploy/k8s/secret.yaml
 .DS_Store
 *.egg-info/
 .superpowers/

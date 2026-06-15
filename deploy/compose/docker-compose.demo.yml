@@ -12,7 +12,7 @@
 
 services:
   timescaledb:
-    image: timescale/timescaledb:latest-pg16
+    image: timescale/timescaledb@sha256:22e8a5ae7aef121d1537afe946dd7cc5deeeb63ab36ce19849d671bd3b663509  # latest-pg16, digest-pinned
     environment:
       POSTGRES_USER: sunsteer
       POSTGRES_PASSWORD: sunsteer
@@ -26,8 +26,21 @@ services:
       timeout: 3s
       retries: 12
 
+  db-migrate:
+    image: timescale/timescaledb@sha256:22e8a5ae7aef121d1537afe946dd7cc5deeeb63ab36ce19849d671bd3b663509  # latest-pg16, digest-pinned
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: sunsteer
+    volumes:
+      - ../../db/migrations:/migrations:ro
+    entrypoint: ["/bin/sh", "-c",
+      "for f in $$(find /migrations -name '*.sql' | sort); do echo \"applying $$f\"; psql -h timescaledb -U sunsteer -d energy -v ON_ERROR_STOP=1 -f $$f || exit 1; done; echo 'migrations done'"]
+    restart: "no"
+
   energy-exporter:
-    image: ghcr.io/slippyex/sunsteer/energy-exporter:${SUNSTEER_VERSION:-0.1.0}
+    image: ghcr.io/slippyex/sunsteer/energy-exporter:${SUNSTEER_VERSION:-0.3.0}
     build: ../../services/energy-exporter
     environment:
       METER_DRIVER: mock
@@ -38,9 +51,13 @@ services:
     depends_on:
       timescaledb:
         condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+    security_opt: [ "no-new-privileges:true" ]
+    cap_drop: [ "ALL" ]
 
   surplus-controller:
-    image: ghcr.io/slippyex/sunsteer/surplus-controller:${SUNSTEER_VERSION:-0.1.0}
+    image: ghcr.io/slippyex/sunsteer/surplus-controller:${SUNSTEER_VERSION:-0.3.0}
     build: ../../services/surplus-controller
     environment:
       EXPORTER_STATE_URL: http://energy-exporter:9121/state
@@ -55,9 +72,13 @@ services:
     depends_on:
       timescaledb:
         condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+    security_opt: [ "no-new-privileges:true" ]
+    cap_drop: [ "ALL" ]
 
   control-ui:
-    image: ghcr.io/slippyex/sunsteer/control-ui:${SUNSTEER_VERSION:-0.1.0}
+    image: ghcr.io/slippyex/sunsteer/control-ui:${SUNSTEER_VERSION:-0.3.0}
     build: ../../services/control-ui
     environment:
       PV_LAT: "52.52"
@@ -73,6 +94,10 @@ services:
     depends_on:
       timescaledb:
         condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+    security_opt: [ "no-new-privileges:true" ]
+    cap_drop: [ "ALL" ]
 
 volumes:
   demo-pgdata:

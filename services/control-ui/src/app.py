@@ -1,17 +1,33 @@
 """control-ui: FastAPI + Jinja2 + HTMX. Live from Prometheus, config/log from TimescaleDB."""
 import base64
+import logging
 import os
 import secrets
 import time
+import urllib.parse
+from contextlib import contextmanager, suppress
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from fastapi import FastAPI, Request, Form
+from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import i18n, sources, validation, explain
+from . import explain, i18n, sources, validation
+
+log = logging.getLogger(__name__)
+
+
+def _pos_int(name, default, hi=65535):
+    """Tolerant parse for the DB port: a typo'd value falls back to the default instead of
+    crashing the UI at import."""
+    try:
+        v = int(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+    return v if 1 <= v <= hi else default
+
 
 PROM = os.environ.get("PROMETHEUS_URL", "http://prometheus:9090")
 GRAFANA = os.environ.get("GRAFANA_URL", "")        # empty -> Grafana link hidden in the UI
@@ -24,7 +40,7 @@ WTZ = os.environ.get("PV_TZ", "UTC")
 CONTROLLER_STATUS_URL = os.environ.get(
     "CONTROLLER_STATUS_URL", "http://surplus-controller:9124/status")
 DB = dict(host=os.environ.get("DB_HOST", "timescaledb"),
-          port=int(os.environ.get("DB_PORT", "5432")), db=os.environ.get("DB_NAME", "energy"),
+          port=_pos_int("DB_PORT", 5432), db=os.environ.get("DB_NAME", "energy"),
           user=os.environ.get("DB_USER"), password=os.environ.get("DB_PASS"))
 
 REQUIRED_ENV = ("PV_LAT", "PV_LON", "DB_USER", "DB_PASS")
@@ -36,6 +52,12 @@ def validate_env():
     if missing:
         raise SystemExit("control-ui: missing required environment variables: "
                          + ", ".join(missing))
+    # The k8s example manifests ship CHANGE_ME placeholders; starting against one (e.g.
+    # PV_LAT=CHANGE_ME) is a misconfiguration, not a value — reject it as if it were absent.
+    placeholder = [n for n in REQUIRED_ENV if "CHANGE_ME" in os.environ.get(n, "")]
+    if placeholder:
+        raise SystemExit("control-ui: required environment variables still set to a "
+                         "CHANGE_ME placeholder: " + ", ".join(placeholder))
 
 
 validate_env()
@@ -44,8 +66,38 @@ validate_env()
 # ADMIN_PASS must lock the UI down (503), never silently open it. With ADMIN_PASS set the
 # browser prompts once and caches creds, so HTMX writes carry them automatically. /healthz
 # stays open so the kubelet probe needs no credentials.
-ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
-ADMIN_PASS = os.environ.get("ADMIN_PASS") or None
+
+
+def _admin_secret(value):
+    """Normalize an ADMIN_USER/ADMIN_PASS env value: blank or a CHANGE_ME k8s placeholder
+    (secret.example.yaml ships ADMIN_PASS=CHANGE_ME) is a misconfiguration, not a credential
+    — return None so the auth gate stays fail-closed/locked exactly as when it's unset."""
+    if not value or "CHANGE_ME" in value:
+        return None
+    return value
+
+
+# ADMIN_USER/ADMIN_PASS are NOT in REQUIRED_ENV (the UI may be locked on purpose), so the
+# CHANGE_ME rejection there doesn't cover them — sanitize here. An un-edited deploy then
+# locks (503) instead of accepting the literal "CHANGE_ME" as a valid password.
+ADMIN_USER = _admin_secret(os.environ.get("ADMIN_USER", "admin"))
+ADMIN_PASS = _admin_secret(os.environ.get("ADMIN_PASS"))
+
+# CSRF defense: HTTP Basic creds are auto-sent by the browser, so a cross-site POST to
+# /control or /settings would otherwise change operating state. Reject state-changing
+# requests whose Origin/Referer host doesn't match Host. ALLOWED_ORIGIN lets a reverse
+# proxy present a different external host.
+def _norm_origin(v):
+    """Reduce ALLOWED_ORIGIN to the host[:port] form the Origin/Referer check compares
+    against. Accepts either a full URL (https://host:port, as documented) or a bare
+    host[:port], so both spellings work."""
+    if not v:
+        return None
+    parts = urllib.parse.urlsplit(v if "://" in v else "//" + v)
+    return parts.netloc or None
+
+
+ALLOWED_ORIGIN = _norm_origin(os.environ.get("ALLOWED_ORIGIN"))
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -62,15 +114,32 @@ def _basic_ok(header):
     return secrets.compare_digest(user, ADMIN_USER) and secrets.compare_digest(pw, ADMIN_PASS)
 
 
+def _origin_ok(request: Request) -> bool:
+    """CSRF guard for state-changing requests. If an Origin header is present its host:port
+    must match Host; else if a Referer is present its host must match Host. No Origin and no
+    Referer (curl/scripts/non-browser) -> allowed. ALLOWED_ORIGIN (reverse proxy) also passes."""
+    host = request.headers.get("host")
+    allowed = {h for h in (host, ALLOWED_ORIGIN) if h}
+    origin = request.headers.get("origin")
+    if origin:
+        return urllib.parse.urlsplit(origin).netloc in allowed
+    referer = request.headers.get("referer")
+    if referer:
+        return urllib.parse.urlsplit(referer).netloc in allowed
+    return True                                  # non-browser client -> no CSRF surface
+
+
 @app.middleware("http")
 async def _auth(request: Request, call_next):
     if request.url.path in ("/healthz", "/readyz") or request.url.path.startswith("/static/"):   # probe + static always open
         return await call_next(request)
-    if not ADMIN_PASS:                           # fail-closed: no credentials configured -> locked
+    if not ADMIN_PASS or not ADMIN_USER:         # fail-closed: no credentials configured -> locked
         return Response("control-ui gesperrt: ADMIN_PASS nicht konfiguriert", status_code=503)
     if not _basic_ok(request.headers.get("Authorization")):
         return Response("Authentifizierung erforderlich", status_code=401,
                         headers={"WWW-Authenticate": 'Basic realm="control-ui"'})
+    if request.method == "POST" and not _origin_ok(request):
+        return Response("CSRF: Origin/Referer mismatch", status_code=403)
     return await call_next(request)
 
 
@@ -148,7 +217,7 @@ def render(request: Request, template: str, **ctx):
     lang = i18n.get_lang(request)
     ctx.update(request=request, lang=lang,
                t=lambda key, default=None, **fmt: i18n.t(lang, key, default=default, **fmt))
-    return templates.TemplateResponse(template, ctx)
+    return templates.TemplateResponse(request, template, ctx)
 
 
 @app.get("/lang/{code}")
@@ -162,6 +231,25 @@ def set_lang(code: str):
 
 def _db():
     return sources.connect(**DB)
+
+
+@contextmanager
+def _db_optional():
+    """Yield a DB connection, or None if the DB is unreachable. Every sources.* reader
+    tolerates a None/failing connection (returns empty), so handlers degrade to dashes
+    instead of 500-ing during a DB outage."""
+    conn = None
+    try:
+        conn = _db()
+    except Exception as e:
+        log.warning("DB connect failed, degrading to empty reads: %s", e)
+        conn = None
+    try:
+        yield conn
+    finally:
+        if conn is not None:
+            with suppress(Exception):
+                conn.close()
 
 
 def _live():
@@ -179,12 +267,12 @@ def _live():
 
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
-    conn = _db()
-    try:
+    # Use the shared _db_optional() contract like every other read handler: on a DB outage
+    # conn is None and the sources.* readers return empty, so the UI degrades to dashes
+    # instead of 500-ing.
+    with _db_optional() as conn:
         cfg = sources.load_config(conn)
         decisions = sources.recent_decisions(conn)
-    finally:
-        conn.close()
     return render(request, "index.html", live=_live(), cfg=cfg,
                   decisions=decisions, grafana=GRAFANA, weather_location=WEATHER_LOCATION)
 
@@ -198,27 +286,33 @@ def status(request: Request):
 def control(request: Request, mode: str = Form(...), manual_relay_on: str = Form(None)):
     if mode not in ("auto", "manual", "paused"):
         mode = "paused"
-    conn = _db()
-    try:
-        sources.save_mode(conn, mode, manual_relay_on == "on")
-    finally:
-        conn.close()
-    return render(request, "partials/control.html",
-                  cfg={"mode": mode, "manual_relay_on": manual_relay_on == "on"})
+    # DB down -> skip the write (a write to a dead DB must not silently "succeed"). On a hardware
+    # control UI we must NOT echo the requested mode as if applied, or the operator sees a
+    # fake-applied highlight. So on db_down render an empty cfg (no active highlight) + a warning.
+    with _db_optional() as conn:
+        db_down = conn is None
+        if not db_down:
+            sources.save_mode(conn, mode, manual_relay_on == "on")
+    cfg = {} if db_down else {"mode": mode, "manual_relay_on": manual_relay_on == "on"}
+    return render(request, "partials/control.html", cfg=cfg, db_down=db_down)
 
 
 @app.post("/settings", response_class=HTMLResponse)
 async def settings(request: Request):
     form = dict(await request.form())
     clean, errors = validation.validate_settings(form)
+    saved = False
+    db_down = False
     if not errors:
-        conn = _db()
-        try:
-            sources.save_settings(conn, clean)
-        finally:
-            conn.close()
+        # Validation passed. DB down -> skip the write (don't fake success) and surface a
+        # warning so the operator knows nothing was persisted, returning 200 not 500.
+        with _db_optional() as conn:
+            db_down = conn is None
+            if not db_down:
+                sources.save_settings(conn, clean)
+                saved = True
     return render(request, "partials/settings.html",
-                  form=form, errors=errors, saved=not errors)
+                  form=form, errors=errors, saved=saved, db_down=db_down)
 
 
 @app.get("/api/series")
@@ -248,11 +342,8 @@ def api_weather():
 
 @app.get("/partials/why", response_class=HTMLResponse)
 def why(request: Request):
-    conn = _db()
-    try:
+    with _db_optional() as conn:
         cfg = sources.load_config(conn)
-    finally:
-        conn.close()
     st = sources.controller_status(CONTROLLER_STATUS_URL)
     if st is not None:
         # show the SAME 2-min-smoothed surplus as the status tile, so the "Warum"-card and
@@ -278,14 +369,12 @@ def ticker(request: Request):
 
 @app.get("/partials/balance", response_class=HTMLResponse)
 def balance(request: Request):
-    conn = _db()
-    try:
+    with _db_optional() as conn:
         cfg = sources.load_config(conn)
         sm = sources.today_summary(conn)
         sm["forecast"] = sources.solar_forecast_today(conn)
-    finally:
-        conn.close()
-    grid = float(cfg.get("grid_price_eur_kwh", 0.30)); feed = float(cfg.get("feed_in_tariff_eur_kwh", 0.08))
+    grid = float(cfg.get("grid_price_eur_kwh", 0.30))
+    feed = float(cfg.get("feed_in_tariff_eur_kwh", 0.08))
     # WP energy is not metered (Shelly is an SG-Ready signal) -> estimate from run-time × nominal power.
     nominal_kw = float(cfg.get("wp_nominal_power_w", 2000)) / 1000.0
     sm["wp_today_kwh"] = round(nominal_kw * sm.get("wp_runtime_h", 0), 2)
@@ -330,24 +419,18 @@ def inverter(request: Request):
 
 @app.get("/partials/decisions", response_class=HTMLResponse)
 def decisions_partial(request: Request):
-    conn = _db()
-    try:
+    with _db_optional() as conn:
         decisions = sources.recent_decisions(conn)
-    finally:
-        conn.close()
     return render(request, "partials/decisions.html", decisions=decisions)
 
 
 @app.get("/api/effectiveness")
 def api_effectiveness(window: str = "7d"):
-    conn = _db()
-    try:
+    with _db_optional() as conn:
         cfg = sources.load_config(conn)
         days = sources.effectiveness_daily(
             conn, window, cfg.get("wp_nominal_power_w", 2000),
             cfg.get("grid_price_eur_kwh", 0.30), cfg.get("feed_in_tariff_eur_kwh", 0.08))
-    finally:
-        conn.close()
     return JSONResponse({"days": days})
 
 
@@ -358,26 +441,20 @@ def api_wp_timeline():
         hour=0, minute=0, second=0, microsecond=0).timestamp())
     # From the heatpump table, not Prometheus: the controller gauge has one series per pod, so a
     # day with restarts (crashloops/rollouts) yields the wrong/empty series in a range query.
-    conn = _db()
-    try:
+    with _db_optional() as conn:
         relay = sources.wp_timeline_today(conn, start)
-    finally:
-        conn.close()
     return JSONResponse({"relay": relay, "start": start, "now": now})
 
 
 @app.get("/api/wp-history")
 def api_wp_history(window: str = "24h"):
-    conn = _db()
-    try:
+    with _db_optional() as conn:
         cfg = sources.load_config(conn)
         nominal = cfg.get("wp_nominal_power_w", 2000)
         data = sources.wp_history(conn, window, nominal)
         data["savings"] = sources.wp_savings(
             conn, window, nominal,
             cfg.get("grid_price_eur_kwh", 0.30), cfg.get("feed_in_tariff_eur_kwh", 0.08))
-    finally:
-        conn.close()
     return JSONResponse(data)
 
 

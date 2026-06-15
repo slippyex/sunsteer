@@ -2,8 +2,7 @@ import json
 import os
 
 import pytest
-
-from src.extract import extract, FIELDS
+from src.extract import FIELDS, extract
 
 
 def _feat(name, props):

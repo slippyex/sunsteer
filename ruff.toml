@@ -1,0 +1,29 @@
+# OSS-maturity lint gate. Sensible, not maximal: catch real bugs and keep
+# imports/style consistent without forcing a mass rewrite of the existing code.
+target-version = "py312"
+line-length = 100
+
+[lint]
+# E/F  = pycodestyle errors + pyflakes (the baseline)
+# I    = import sorting (isort)
+# B    = flake8-bugbear (likely-bug patterns)
+# UP   = pyupgrade (keep idioms modern for the py312 target)
+# SIM  = flake8-simplify (readability)
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
+# E501 (line-too-long) is intentionally NOT enforced as a hard lint error.
+# line-length=100 above still drives import sorting / any future formatter run,
+# but the existing code keeps long lines for aligned data tables (i18n tuples,
+# Modbus register maps), inline-aligned comments, SQL and URL literals — wrapping
+# those is cosmetic churn that hurts readability and risks splitting string
+# literals. We gate on real-bug rules, not column count.
+ignore = ["E501"]
+
+[lint.per-file-ignores]
+# Tests favour explicit, readable assertions over the most "simplified" form;
+# they group `import`s next to the test block they support (a deliberate,
+# common test-file idiom) rather than all at the top; and they use compact
+# one-line `setup; tweak` fixtures (E701/E702) that read better as one unit.
+# These are style choices local to tests — the src/ tree IS gated on E701/E702.
+"**/tests/**" = ["SIM", "E402", "E701", "E702"]
+"tests/**" = ["SIM", "E402", "E701", "E702"]

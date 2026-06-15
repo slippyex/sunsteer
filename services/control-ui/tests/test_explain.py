@@ -1,4 +1,4 @@
-from src.explain import explain, effectiveness_eur, energy_today
+from src.explain import effectiveness_eur, energy_today, explain
 
 CFG = {"wp_nominal_power_w": 2000, "threshold_off_w": 200}
 
