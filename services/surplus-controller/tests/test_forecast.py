@@ -1,4 +1,4 @@
-from src.forecast import remaining_kwh, day_kwh
+from src.forecast import day_kwh, remaining_kwh
 
 RESULT = {
     "watt_hours_period": {
@@ -50,7 +50,7 @@ def test_fetch_all_all_failed_returns_none(monkeypatch):
 
 
 # ── Open-Meteo GTI forecast ────────────────────────────────────────────────
-from src.forecast import (gti_day_kwh_per_m2, gti_remaining_kwh_per_m2, fit_pr, pv_estimate)
+from src.forecast import fit_pr, gti_day_kwh_per_m2, gti_remaining_kwh_per_m2, pv_estimate
 
 # one plane's hourly GTI (W/m2): yesterday (full) + today (partial day so far)
 GTI = [
@@ -102,3 +102,16 @@ def test_pv_estimate_keeps_current_pr_without_history():
     day, rem, pr = pv_estimate([(GTI3, 1.0)], "2026-06-09 11:00:00", "2026-06-09",
                                current_pr=0.7, actual_by_day={})   # no actuals -> keep 0.7
     assert pr == 0.7 and round(day, 2) == 0.7
+
+
+from src.forecast import open_meteo_gti_url
+
+
+def test_gti_url_uses_supplied_timezone():
+    url = open_meteo_gti_url(50.0, 8.0, 30, 0, 14, 2, tz="America/New_York")
+    assert "timezone=America%2FNew_York" in url
+
+
+def test_gti_url_defaults_to_utc():
+    url = open_meteo_gti_url(50.0, 8.0, 30, 0, 14, 2)
+    assert "timezone=UTC" in url

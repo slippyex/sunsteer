@@ -60,9 +60,13 @@ If it works well, we'd still love a link or a write-up in an issue.
   neutral defaults, and RFC-5737 addresses (`192.0.2.x`) in tests.
 - User-facing strings in the UI go through the i18n table
   (`services/control-ui/src/i18n.py`) with English and German entries.
+- **Schema changes:** add a numbered idempotent migration in `db/migrations/`, never
+  edit `init.sql` for post-release changes (see `db/migrations/README.md`).
 
 ## Safety-relevant changes
 
 Anything touching the fail-safe chain (staleness handling, the relay auto-off
 watchdog, minimum runtimes) gets extra scrutiny — explain the behaviour change and its
-failure modes in the PR description. When in doubt, open an issue first.
+failure modes in the PR description. When in doubt, open an issue first. For the relay
+actuator contract (including the required hardware auto-off watchdog), see
+[docs/relay-interface.md](docs/relay-interface.md).

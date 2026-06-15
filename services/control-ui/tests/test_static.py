@@ -1,5 +1,5 @@
-from fastapi.testclient import TestClient
 import src.app as appmod
+from fastapi.testclient import TestClient
 
 
 def test_static_css_served():

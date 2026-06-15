@@ -1,7 +1,7 @@
 """vicare_* Prometheus metrics."""
 import datetime
 
-from prometheus_client import Gauge, Counter
+from prometheus_client import Counter, Gauge
 
 from .extract import FIELDS, STRING_FIELDS
 
@@ -12,6 +12,8 @@ GAUGES = {f: Gauge(f"vicare_{f}", f"ViCare {f}")
 API_CALLS = Counter("vicare_api_calls_total", "ViCare API calls made")
 SCRAPE_ERRORS = Counter("vicare_scrape_errors_total", "Poll/parse errors", ["stage"])
 RATE_LIMITED = Counter("vicare_rate_limited_total", "HTTP 429 / limit responses")
+INVALID_CREDENTIALS = Counter("vicare_invalid_credentials_total",
+                              "Connect attempts rejected as invalid credentials (permanent)")
 BUDGET_EXHAUSTED = Gauge("vicare_budget_exhausted", "1 = daily call budget reached, poll skipped")
 BUDGET_USED = Gauge("vicare_budget_used", "API calls used in the trailing 24h window")
 LAST_SUCCESS = Gauge("vicare_last_success_timestamp_seconds", "Unix ts of last successful poll")

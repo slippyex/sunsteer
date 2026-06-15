@@ -23,6 +23,11 @@ _VALID_MODES = ("auto", "manual", "paused")
 def clamp_config(cfg: dict) -> dict:
     """Force every value into a safe range so a bad DB row can't harm the heat pump."""
     c = {**DEFAULTS, **cfg}
+    # A NULL (None) column in control_config must degrade to its DEFAULT, not blow up float()/
+    # int() and freeze hot-reload of the WHOLE config. Coerce per-field BEFORE casting.
+    for k, default in DEFAULTS.items():
+        if c.get(k) is None:
+            c[k] = default
     if c["mode"] not in _VALID_MODES:
         c["mode"] = "paused"
     c["manual_relay_on"] = bool(c["manual_relay_on"])
@@ -30,7 +35,9 @@ def clamp_config(cfg: dict) -> dict:
     c["threshold_base_w"] = max(0.0, float(c["threshold_base_w"]))
     c["threshold_min_w"] = max(0.0, min(float(c["threshold_min_w"]), c["threshold_base_w"]))
     c["threshold_off_w"] = max(0.0, float(c["threshold_off_w"]))
-    if c["threshold_off_w"] >= c["threshold_min_w"]:
+    # Guarantee the claimed invariant off < min whenever min > 0. The degenerate min == 0 case
+    # can't satisfy off < 0 (off is clamped >= 0), so it stays a no-op (off == min == 0).
+    if c["threshold_min_w"] > 0 and c["threshold_off_w"] >= c["threshold_min_w"]:
         c["threshold_off_w"] = max(0.0, c["threshold_min_w"] - 50.0)
     c["on_delay_cycles"] = max(1, int(c["on_delay_cycles"]))
     c["off_delay_cycles"] = max(1, int(c["off_delay_cycles"]))
@@ -52,4 +59,4 @@ def load_config(conn) -> dict:
         row = cur.fetchone()
     if not row:
         return clamp_config(dict(DEFAULTS))
-    return clamp_config(dict(zip(cols, row)))
+    return clamp_config(dict(zip(cols, row, strict=False)))

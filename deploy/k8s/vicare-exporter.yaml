@@ -1,0 +1,99 @@
+# vicare-exporter — OPTIONAL Viessmann ViCare telemetry (temperatures, compressor,
+# energy counters). Not using ViCare? Delete this file and drop it from
+# kustomization.yaml (the VICARE_* secret keys then become unused).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vicare-exporter
+  namespace: sunsteer
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate          # single RWO PVC writer (token + budget cache)
+  selector:
+    matchLabels:
+      app: vicare-exporter
+  template:
+    metadata:
+      labels:
+        app: vicare-exporter
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9125"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001        # so the non-root user can write the /data PVC
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: vicare-exporter
+          image: ghcr.io/slippyex/sunsteer/vicare-exporter:0.3.0  # pinned; kustomize images: bumps it too
+          imagePullPolicy: IfNotPresent
+          env:
+            - { name: METRICS_PORT, value: "9125" }
+            - { name: VICARE_POLL_SECONDS, value: "300" }
+            - { name: VICARE_DAILY_CAP, value: "1400" }
+            - { name: VICARE_TOKEN_FILE, value: "/data/vicare_token.json" }
+            - { name: VICARE_BUDGET_FILE, value: "/data/vicare_budget.json" }
+            - { name: DB_HOST, value: "timescaledb" }
+            - { name: DB_PORT, value: "5432" }
+            - { name: DB_NAME, value: "energy" }
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef: { name: sunsteer-secrets, key: DB_USER }
+            - name: DB_PASS
+              valueFrom:
+                secretKeyRef: { name: sunsteer-secrets, key: DB_PASS }
+            - name: VICARE_USER
+              valueFrom:
+                secretKeyRef: { name: sunsteer-secrets, key: VICARE_USER }
+            - name: VICARE_PASS
+              valueFrom:
+                secretKeyRef: { name: sunsteer-secrets, key: VICARE_PASS }
+            - name: VICARE_CLIENT_ID
+              valueFrom:
+                secretKeyRef: { name: sunsteer-secrets, key: VICARE_CLIENT_ID }
+          ports:
+            - { containerPort: 9125, name: metrics }
+          livenessProbe:
+            tcpSocket: { port: 9125 }
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: token, mountPath: /data }
+          resources:
+            requests: { cpu: 25m, memory: 64Mi }
+            limits: { memory: 128Mi }
+      volumes:
+        - name: token
+          persistentVolumeClaim:
+            claimName: vicare-token
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vicare-exporter
+  namespace: sunsteer
+spec:
+  selector:
+    app: vicare-exporter
+  ports:
+    - { name: metrics, port: 9125, targetPort: 9125 }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vicare-token
+  namespace: sunsteer
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 64Mi
+  # Uses the cluster's default StorageClass.

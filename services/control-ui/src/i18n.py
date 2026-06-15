@@ -130,6 +130,10 @@ S = {
     "reason_external_change":             ("extern (Watchdog/SMA)", "external (watchdog/SMA)"),
     "reason_extern (Watchdog/SMA)":       ("extern (Watchdog/SMA)", "external (watchdog/SMA)"),
     "reason_shelly_write_failed":         ("Shelly-Schreibfehler", "Shelly write failed"),
+    "reason_surplus_ok":          ("Überschuss ausreichend", "surplus sufficient"),
+    "reason_waiting_surplus":     ("warte auf Überschuss", "waiting for surplus"),
+    "reason_waiting_min_offtime": ("warte Mindestpause", "waiting out min off-time"),
+    "reason_min_runtime":         ("Mindestlaufzeit aktiv", "min runtime active"),
 
     # ── weather ────────────────────────────────────────────────────────────
     "weather_title":      ("Wetter", "Weather"),
@@ -229,6 +233,8 @@ S = {
                            "On: the threshold drops towards the min threshold when the solar forecast is good. Off: always the base threshold."),
     "save":               ("Speichern", "Save"),
     "saved":              ("gespeichert", "saved"),
+    "db_unreachable":     ("Datenbank nicht erreichbar — nicht gespeichert",
+                           "Database unreachable — not saved"),
 }
 
 _IDX = {"de": 0, "en": 1}

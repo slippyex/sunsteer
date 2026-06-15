@@ -80,6 +80,9 @@ docker compose up -d     # pulls released images from GHCR
 Step-by-step instructions: [docs/setup.md](docs/setup.md) ·
 Supported devices and wiring notes: [docs/hardware.md](docs/hardware.md)
 
+Kubernetes: see [deploy/k8s/](deploy/k8s/) for example manifests (a generic kustomize
+base — the reference install runs on K3s).
+
 Released images (multi-arch, `linux/amd64` + `linux/arm64` — Raspberry Pi works):
 
 | Image | Purpose |
@@ -130,7 +133,6 @@ Contributions welcome: [CONTRIBUTING.md](CONTRIBUTING.md)
 ## Roadmap
 
 - More meter drivers (Shelly 3EM at the feed-in point, Tibber Pulse, P1/DSMR)
-- Kubernetes deployment examples (the reference install runs on K3s)
 - Grafana dashboard provisioning
 - More SG-Ready states than ON/OFF (e.g. recommendation vs. command)
 - MQTT / Home Assistant integration

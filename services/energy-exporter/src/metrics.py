@@ -1,6 +1,7 @@
 """Prometheus metric definitions + update helpers."""
 import time
-from prometheus_client import Gauge, Counter
+
+from prometheus_client import Counter, Gauge
 
 # SHM
 SHM_IMPORT = Gauge("sma_shm_grid_import_watts", "Grid import (W)")
@@ -36,23 +37,30 @@ POLL_ERRORS = Counter("energy_exporter_poll_errors_total", "Failed reads", ["sou
 
 
 def update_shm(r: dict) -> None:
-    SHM_IMPORT.set(r["import_w"]); SHM_EXPORT.set(r["export_w"])
+    SHM_IMPORT.set(r["import_w"])
+    SHM_EXPORT.set(r["export_w"])
     SHM_SURPLUS.set(r["surplus_w"])
     SHM_PHASE.labels("L1").set(r["l1_w"])
     SHM_PHASE.labels("L2").set(r["l2_w"])
     SHM_PHASE.labels("L3").set(r["l3_w"])
-    SHM_IMPORT_KWH.set(r["import_kwh_total"]); SHM_EXPORT_KWH.set(r["export_kwh_total"])
+    SHM_IMPORT_KWH.set(r["import_kwh_total"])
+    SHM_EXPORT_KWH.set(r["export_kwh_total"])
     SHM_LAST_TS.set(time.time())
 
 
 def update_shelly(r) -> None:
     if r is None:
-        SHELLY_REACHABLE.set(0); POLL_ERRORS.labels("shelly").inc(); return
+        SHELLY_REACHABLE.set(0)
+        POLL_ERRORS.labels("shelly").inc()
+        return
     SHELLY_REACHABLE.set(1)
     SHELLY_ON.set(1 if r["relay_on"] else 0)
-    SHELLY_POWER.set(r["power_w"]); SHELLY_ENERGY.set(r["energy_wh_total"])
-    if r["voltage"] is not None: SHELLY_VOLTAGE.set(r["voltage"])
-    if r["temperature_c"] is not None: SHELLY_TEMP.set(r["temperature_c"])
+    SHELLY_POWER.set(r["power_w"])
+    SHELLY_ENERGY.set(r["energy_wh_total"])
+    if r["voltage"] is not None:
+        SHELLY_VOLTAGE.set(r["voltage"])
+    if r["temperature_c"] is not None:
+        SHELLY_TEMP.set(r["temperature_c"])
 
 
 def _setg(gauge, value):
@@ -62,7 +70,9 @@ def _setg(gauge, value):
 
 def update_inverter(r) -> None:
     if r is None:
-        INV_REACHABLE.set(0); POLL_ERRORS.labels("inverter").inc(); return
+        INV_REACHABLE.set(0)
+        POLL_ERRORS.labels("inverter").inc()
+        return
     INV_REACHABLE.set(1)
     INV_POWER.set(r["production_w"])
     INV_TOTAL.set(r["total_yield_kwh"])

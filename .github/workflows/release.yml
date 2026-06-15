@@ -12,23 +12,83 @@ permissions:
   packages: write
 
 jobs:
+  # Lint + dependency-audit gate — same as ci.yml. A tag can point at any commit, not
+  # only a CI-green one, so re-run it here: a red ruff/pip-audit must never ship images.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with: { python-version: "3.12" }
+      - name: Install tools
+        run: pip install ruff==0.15.17 pip-audit==2.10.1   # pinned — avoid pipeline drift
+      - name: Ruff lint
+        run: ruff check .
+      - name: pip-audit (per service)
+        run: |
+          rc=0
+          for req in services/*/requirements.txt; do
+            echo "::group::pip-audit $req"
+            pip-audit -r "$req" || rc=1
+            echo "::endgroup::"
+          done
+          exit $rc
+
+  # Real-DB schema smoke — same gate as ci.yml. A tag can point at any commit, not
+  # only a CI-green one, so re-run it here: schema/column drift must never ship.
+  db-integration:
+    runs-on: ubuntu-latest
+    services:
+      timescaledb:
+        image: timescale/timescaledb@sha256:22e8a5ae7aef121d1537afe946dd7cc5deeeb63ab36ce19849d671bd3b663509  # latest-pg16, digest-pinned (matches runtime)
+        env:
+          POSTGRES_USER: sunsteer
+          POSTGRES_PASSWORD: sunsteer
+          POSTGRES_DB: energy
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U sunsteer -d energy"
+          --health-interval 5s --health-timeout 3s --health-retries 12
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with: { python-version: "3.12" }
+      - name: Apply schema + migrations
+        env: { PGPASSWORD: sunsteer }
+        run: |
+          sudo apt-get update && sudo apt-get install -y postgresql-client
+          psql -h localhost -U sunsteer -d energy -v ON_ERROR_STOP=1 -f db/init.sql
+          for f in $(find db/migrations -name '*.sql' | sort); do
+            psql -h localhost -U sunsteer -d energy -v ON_ERROR_STOP=1 -f "$f"; done
+      - name: Run integration smoke
+        env:
+          PGHOST: localhost
+          PGPORT: "5432"
+          PGDATABASE: energy
+          PGUSER: sunsteer
+          PGPASSWORD: sunsteer
+        run: |
+          pip install psycopg2-binary pytest
+          python -m pytest tests/integration -q
+
   build-and-push:
+    needs: [lint, db-integration]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: true
       matrix:
         service: [energy-exporter, surplus-controller, vicare-exporter, control-ui]
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Gate — run test stage (native)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: services/${{ matrix.service }}
           target: test
@@ -37,19 +97,22 @@ jobs:
           cache-to: type=gha,scope=test-${{ matrix.service }},mode=max
       - name: Image metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: ghcr.io/${{ github.repository_owner }}/sunsteer/${{ matrix.service }}
           tags: |
             type=semver,pattern={{version}}
             type=sha,prefix=sha-
       - name: Build and push (amd64 + arm64)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: services/${{ matrix.service }}
           target: final
           platforms: linux/amd64,linux/arm64
           push: true
+          # Supply-chain: attach an SBOM and SLSA build provenance to each pushed image.
+          provenance: true
+          sbom: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=release-${{ matrix.service }}

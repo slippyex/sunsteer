@@ -39,7 +39,9 @@ def _snapshot():
 class _Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path != "/state":
-            self.send_response(404); self.end_headers(); return
+            self.send_response(404)
+            self.end_headers()
+            return
         body = json.dumps(_snapshot()).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -51,5 +53,6 @@ class _Handler(BaseHTTPRequestHandler):
         pass
 
 
-def serve(port):
-    ThreadingHTTPServer(("", port), _Handler).serve_forever()
+def serve(port, bind=""):
+    # bind "" = all interfaces (default); pass a specific IP to restrict /state exposure.
+    ThreadingHTTPServer((bind, port), _Handler).serve_forever()

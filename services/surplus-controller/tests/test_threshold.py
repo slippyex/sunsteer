@@ -38,7 +38,6 @@ def test_available_zero_nominal_disables_compensation():
 def test_available_prevents_false_off():
     # WP running, raw surplus 250 (< off 200? no) — but with a deeper draw it would
     # dip below off; compensation keeps the off-check on the real PV surplus.
-    off_threshold = 200
-    raw = -1200  # WP eating ~all surplus
+    raw = -1200  # WP eating ~all surplus; off-threshold is 200 for this scenario
     assert available_surplus(raw, True, 1500) == 300  # 300 > 200 -> stays on (real PV ok)
     assert available_surplus(raw, True, 1000) == -200  # under-estimate -> would turn off

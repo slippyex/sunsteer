@@ -1,10 +1,13 @@
 # Optional monitoring add-on. Run MERGED with the main stack so it shares the network:
 #   docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
-# Prometheus: http://localhost:9090 (loopback only) · Grafana: http://localhost:3000
+# Prometheus and Grafana both bind LOOPBACK only by default (Grafana ships a default admin
+# password, so it must not be on the LAN). Prometheus: http://localhost:9090 ·
+# Grafana: http://localhost:3000. To expose Grafana, set a strong GRAFANA_ADMIN_PASS AND
+# GRAFANA_BIND=0.0.0.0 (better: front it with a TLS reverse proxy).
 
 services:
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus@sha256:69f5241418838263316593f7274a304b095c40bcf22e57272865da91bd60a8ac  # digest-pinned
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
@@ -16,7 +19,7 @@ services:
     restart: unless-stopped
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana@sha256:5dad0df181cb644a14e13617b913b261a54f7d4fd4510721dba420929f35bea2  # digest-pinned
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASS:-admin}
@@ -24,7 +27,9 @@ services:
       - ./monitoring/grafana-datasource.yml:/etc/grafana/provisioning/datasources/sunsteer.yml:ro
       - grafana-data:/var/lib/grafana
     ports:
-      - "3000:3000"
+      # Loopback by default (default admin password) — set GRAFANA_BIND=0.0.0.0 with a strong
+      # GRAFANA_ADMIN_PASS, or front it with a TLS reverse proxy, to expose it.
+      - "${GRAFANA_BIND:-127.0.0.1}:3000:3000"
     restart: unless-stopped
 
 volumes:

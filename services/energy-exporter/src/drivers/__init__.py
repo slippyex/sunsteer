@@ -6,14 +6,17 @@ exporter that serves the same /state JSON (see docs/state-interface.md, Phase 6)
 For a new in-tree driver: add its key to SUPPORTED_METERS and a branch in get_meter().
 The Protocols are structural typing specs — drivers do NOT inherit from them.
 The write side of the relay (Switch.Set) intentionally lives in the surplus-controller
-(shelly_ctl.py) — this service is strictly READ-ONLY.
+(relays/shelly.py) — this service is strictly READ-ONLY.
 """
 import os
-from typing import Callable, Protocol
+from collections.abc import Callable
+from typing import Protocol
 
-__all__ = ("GridMeter", "Relay", "SUPPORTED_METERS", "get_meter")
+__all__ = ("GridMeter", "RelayReader", "SUPPORTED_METERS", "get_meter",
+           "SUPPORTED_RELAYS", "get_relay")
 
 SUPPORTED_METERS = ("sma_shm", "mock")
+SUPPORTED_RELAYS = ("shelly",)
 
 
 class GridMeter(Protocol):
@@ -23,7 +26,7 @@ class GridMeter(Protocol):
         import_kwh_total, export_kwh_total, l1_w, l2_w, l3_w."""
 
 
-class Relay(Protocol):
+class RelayReader(Protocol):
     def get_state(self) -> dict | None:
         """Current relay state ({relay_on, power_w, ...}) or None if unreachable."""
 
@@ -38,3 +41,12 @@ def get_meter(name):
         return MockMeter()
     raise SystemExit(f"energy-exporter: unknown METER_DRIVER '{name}' "
                      f"(supported: {', '.join(SUPPORTED_METERS)})")
+
+
+def get_relay(name):
+    """Read-only relay status reader for RELAY_DRIVER. Unknown names fail fast."""
+    if name == "shelly":
+        from .shelly import ShellyRelayReader
+        return ShellyRelayReader(os.environ.get("SHELLY_URL"))
+    raise SystemExit(f"energy-exporter: unknown RELAY_DRIVER '{name}' "
+                     f"(supported: {', '.join(SUPPORTED_RELAYS)})")

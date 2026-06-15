@@ -1,5 +1,4 @@
 import pytest
-
 import src.drivers as D
 from src.drivers.mock import MockMeter
 
@@ -38,3 +37,16 @@ def test_mock_energy_counters_are_monotonic():
     r1, r2 = m.reading(), m.reading()
     assert r2["import_kwh_total"] >= r1["import_kwh_total"]
     assert r2["export_kwh_total"] >= r1["export_kwh_total"]
+
+
+def test_get_relay_unknown_fails_fast():
+    import pytest
+    with pytest.raises(SystemExit) as e:
+        D.get_relay("bogus")
+    assert "bogus" in str(e.value) and "shelly" in str(e.value)
+
+
+def test_get_relay_shelly_uses_shelly_url(monkeypatch):
+    monkeypatch.setenv("SHELLY_URL", "http://192.0.2.90")
+    r = D.get_relay("shelly")
+    assert r.base_url == "http://192.0.2.90"

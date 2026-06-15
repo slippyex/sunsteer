@@ -58,7 +58,8 @@ class _Handler(BaseHTTPRequestHandler):
             self._json(200 if alive else 503,
                        {"ok": alive, "heartbeat_age_s": None if age is None else round(age, 1)})
         else:
-            self.send_response(404); self.end_headers()
+            self.send_response(404)
+            self.end_headers()
 
     def _json(self, code, obj):
         body = json.dumps(obj).encode()

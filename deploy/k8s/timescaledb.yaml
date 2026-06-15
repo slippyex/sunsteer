@@ -1,0 +1,76 @@
+# TimescaleDB for Sunsteer.
+#
+# The init.sql ConfigMap is NOT defined here — create it from db/init.sql first:
+#   kubectl -n sunsteer create configmap timescaledb-init --from-file=init.sql=../../db/init.sql
+# (init.sql only runs on a first-time, empty data directory. Apply later schema
+#  changes from db/migrations/ manually — see the README in this directory.)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: timescaledb
+  namespace: sunsteer
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate          # single RWO PVC writer
+  selector:
+    matchLabels:
+      app: timescaledb
+  template:
+    metadata:
+      labels:
+        app: timescaledb
+    spec:
+      containers:
+        - name: timescaledb
+          image: timescale/timescaledb@sha256:22e8a5ae7aef121d1537afe946dd7cc5deeeb63ab36ce19849d671bd3b663509  # latest-pg16, digest-pinned
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef: { name: sunsteer-secrets, key: DB_USER }
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: sunsteer-secrets, key: DB_PASS }
+            - name: POSTGRES_DB
+              value: "energy"
+          volumeMounts:
+            - name: pgdata
+              mountPath: /var/lib/postgresql/data
+            - name: init-scripts
+              mountPath: /docker-entrypoint-initdb.d
+          resources:
+            requests: { cpu: "250m", memory: "512Mi" }
+            limits: { cpu: "1000m", memory: "2Gi" }
+      volumes:
+        - name: pgdata
+          persistentVolumeClaim:
+            claimName: timescaledb-data
+        - name: init-scripts
+          configMap:
+            name: timescaledb-init
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: timescaledb
+  namespace: sunsteer
+spec:
+  selector:
+    app: timescaledb
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: timescaledb-data
+  namespace: sunsteer
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+  # Uses the cluster's default StorageClass. Set storageClassName to pin a class.

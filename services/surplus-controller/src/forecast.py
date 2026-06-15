@@ -1,6 +1,10 @@
 """forecast.solar fetch + parsing. Pure parse helpers + a fetch wrapper."""
 import json
+import logging
+import urllib.parse
 import urllib.request
+
+_log = logging.getLogger(__name__)
 
 
 def remaining_kwh(result: dict, now_str: str) -> float:
@@ -32,6 +36,8 @@ def fetch(lat, lon, decl, az, kwp, now_str, day_str, timeout=15.0):
         rem = remaining_kwh(result, now_str)
         return day, min(rem, day)   # remaining-today can never exceed today's total
     except Exception:
+        _log.warning("forecast.solar fetch/parse failed for plane decl=%s az=%s kwp=%s",
+                     decl, az, kwp, exc_info=True)
         return None
 
 
@@ -57,22 +63,24 @@ def fetch_all(lat, lon, planes, now_str, day_str, timeout=15.0):
 OPEN_METEO = "https://api.open-meteo.com/v1/forecast"
 
 
-def open_meteo_gti_url(lat, lon, tilt, az, past_days, forecast_days):
+def open_meteo_gti_url(lat, lon, tilt, az, past_days, forecast_days, tz="UTC"):
     return (f"{OPEN_METEO}?latitude={lat}&longitude={lon}"
             f"&hourly=global_tilted_irradiance&tilt={tilt}&azimuth={az}"
-            f"&timezone=Europe%2FBerlin&past_days={past_days}&forecast_days={forecast_days}")
+            f"&timezone={urllib.parse.quote(tz, safe='')}&past_days={past_days}&forecast_days={forecast_days}")
 
 
-def fetch_gti(lat, lon, tilt, az, past_days=14, forecast_days=2, timeout=20.0):
+def fetch_gti(lat, lon, tilt, az, past_days=14, forecast_days=2, timeout=20.0, tz="UTC"):
     """Hourly global tilted irradiance (W/m²) for one plane. One call covers past + future so it
     serves BOTH calibration and forecast. Returns [(local_ts 'YYYY-MM-DDTHH:MM', gti), ...] or None."""
     try:
         with urllib.request.urlopen(
-                open_meteo_gti_url(lat, lon, tilt, az, past_days, forecast_days), timeout=timeout) as resp:
+                open_meteo_gti_url(lat, lon, tilt, az, past_days, forecast_days, tz), timeout=timeout) as resp:
             d = json.load(resp)
         h = d["hourly"]
-        return [(t, g) for t, g in zip(h["time"], h["global_tilted_irradiance"]) if g is not None]
+        return [(t, g) for t, g in zip(h["time"], h["global_tilted_irradiance"], strict=False) if g is not None]
     except Exception:
+        _log.warning("Open-Meteo GTI fetch/parse failed for plane tilt=%s az=%s",
+                     tilt, az, exc_info=True)
         return None
 
 
