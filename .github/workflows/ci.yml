@@ -22,6 +22,8 @@ jobs:
       - name: Ruff lint
         run: ruff check .
       - name: mypy (scoped, passing gate over the typed cores — see mypy.ini)
+        # Run PER SERVICE: every service ships a top-level `src` package, so a single mypy
+        # invocation across services mis-resolves shared module names (e.g. two `src.drivers`).
         run: |
           mypy --config-file mypy.ini \
             services/surplus-controller/src/statemachine.py \
@@ -29,14 +31,17 @@ jobs:
             services/surplus-controller/src/config.py \
             services/surplus-controller/src/dblog.py \
             services/surplus-controller/src/relays/shelly.py \
-            services/surplus-controller/src/relays/__init__.py \
+            services/surplus-controller/src/relays/__init__.py
+          mypy --config-file mypy.ini \
             services/energy-exporter/src/sma_decoder.py \
             services/energy-exporter/src/tsdb_writer.py \
-            services/energy-exporter/src/drivers/sma_modbus.py \
+            services/energy-exporter/src/drivers/sma_modbus.py
+          mypy --config-file mypy.ini \
             services/heatpump-exporter/src/extract.py \
             services/heatpump-exporter/src/ratebudget.py \
             services/heatpump-exporter/src/metrics.py \
-            services/heatpump-exporter/src/auth.py \
+            services/heatpump-exporter/src/auth.py
+          mypy --config-file mypy.ini \
             services/control-ui/src/validation.py
       - name: pip-audit (per service)
         run: |
