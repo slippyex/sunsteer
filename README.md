@@ -55,6 +55,8 @@ account is needed. Tear down with `docker compose -f docker-compose.demo.yml dow
   your actual production. No manual tuning drift.
 - **Hysteresis done right** — ON/OFF streak requirements, minimum runtimes and
   off-times protect the compressor; no relay flapping on passing clouds.
+- **Sun-aware** — the surplus calculation knows the sun's position; once it's down there is
+  no PV to harvest, so the heat pump is released instead of being held ON on grid power.
 - **Fail-safe by design** — stale meter data switches the heat pump OFF; a hardware
   auto-off watchdog on the relay catches a dead controller; the web UI is
   fail-closed behind HTTP Basic auth. See [docs/architecture.md](docs/architecture.md).

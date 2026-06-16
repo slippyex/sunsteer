@@ -47,7 +47,11 @@ A deliberately boring loop (default every 15 s):
 1. **Read** `/state` and the hot-reloaded `control_config` from the DB.
 2. **Compensate own load:** `available = surplus + (relay_on ? wp_nominal_power : 0)`.
    Once the heat pump runs, it consumes the very surplus that justified switching it
-   on — without this, the controller would oscillate.
+   on — without this, the controller would oscillate. **Sun-aware:** the compensation is
+   only applied while the sun is above `PV_SUN_MIN_ELEVATION_DEG` (default 3°). After dark
+   no PV is possible, so the `+ wp_nominal` term would be a phantom surplus that keeps the
+   pump running on grid power; below the elevation the raw (negative) surplus is used and the
+   off-hysteresis releases the pump.
 3. **Adaptive threshold:** `threshold = base − (base − min) × remaining_kwh / full_sun_ref_kwh`,
    with the forecast factor clamped to `[0, 1]`. While plenty of PV is still ahead,
    the threshold sits low — switching on early is safe because the day will sustain

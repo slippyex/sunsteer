@@ -257,3 +257,29 @@ def test_non_numeric_state_field_degrades_to_blind_not_a_crash(monkeypatch):
     rec = run_loop(monkeypatch, [bad], relay_seed=True)
     assert (True, M.AUTOOFF_S) in rec.switch_calls               # blind-grace re-arm, didn't crash
     assert M.metrics.LOOP_ERRORS.labels("cycle")._value.get() == before_cycle
+
+
+def test_decide_action_sun_down_disables_compensation():
+    import src.main as M
+    cfg = {"mode": "auto", "manual_relay_on": False, "wp_nominal_power_w": 2000.0,
+           "threshold_off_w": 200.0, "on_delay_cycles": 1, "off_delay_cycles": 1,
+           "min_runtime_s": 0, "min_offtime_s": 0}
+    avail, on_s, off_s, target, action, reason = M.decide_action(
+        cfg, relay_on=True, state_fresh=True, fresh_for_decide=True,
+        surplus=-565.0, eff=1500.0, on_streak=0, off_streak=0,
+        secs_since_on=9999, secs_since_off=9999, sun_up=False)
+    assert avail == -565.0
+    assert target is False and action == "switched_off"
+
+
+def test_decide_action_sun_up_keeps_compensation_unchanged():
+    import src.main as M
+    cfg = {"mode": "auto", "manual_relay_on": False, "wp_nominal_power_w": 2000.0,
+           "threshold_off_w": 200.0, "on_delay_cycles": 1, "off_delay_cycles": 1,
+           "min_runtime_s": 0, "min_offtime_s": 0}
+    avail, on_s, off_s, target, action, reason = M.decide_action(
+        cfg, relay_on=True, state_fresh=True, fresh_for_decide=True,
+        surplus=-565.0, eff=1500.0, on_streak=0, off_streak=0,
+        secs_since_on=9999, secs_since_off=9999, sun_up=True)
+    assert avail == 1435.0
+    assert target is True

@@ -32,6 +32,9 @@ Fill in everything marked **REQUIRED** in `.env`:
   optional `SMA_IFACE_IP` to pin the multicast join to the NIC on the SHM's segment.
 - `SHELLY_URL` — e.g. `http://192.168.1.50`.
 - `PV_LAT`, `PV_LON`, `PV_TZ` — site location and timezone (forecast + day boundaries).
+- `PV_SUN_MIN_ELEVATION_DEG` — optional, default `3.0`. Solar elevation (degrees) below which
+  no PV surplus is possible; the controller then stops load-compensating and releases the heat
+  pump (no running on grid power after dark). Uses `PV_LAT`/`PV_LON`.
 - `PV_PLANES` — your roof as `[[declination, azimuth, kWp], ...]`;
   azimuth 0 = south, −90 = east, +90 = west. An east/west roof has two entries.
 - `DB_PASS`, `ADMIN_PASS` — database and web-UI credentials. The UI refuses to start

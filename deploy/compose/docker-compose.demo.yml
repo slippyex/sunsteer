@@ -47,7 +47,7 @@ services:
     restart: "no"
 
   energy-exporter:
-    image: ghcr.io/slippyex/sunsteer/energy-exporter:${SUNSTEER_VERSION:-0.4.0}
+    image: ghcr.io/slippyex/sunsteer/energy-exporter:${SUNSTEER_VERSION:-0.4.1}
     build: ../../services/energy-exporter
     environment:
       METER_DRIVER: mock
@@ -67,7 +67,7 @@ services:
         limits: { cpus: "0.3", memory: 192M }
 
   surplus-controller:
-    image: ghcr.io/slippyex/sunsteer/surplus-controller:${SUNSTEER_VERSION:-0.4.0}
+    image: ghcr.io/slippyex/sunsteer/surplus-controller:${SUNSTEER_VERSION:-0.4.1}
     build: ../../services/surplus-controller
     environment:
       EXPORTER_STATE_URL: http://energy-exporter:9121/state
@@ -91,7 +91,7 @@ services:
         limits: { cpus: "0.3", memory: 192M }
 
   control-ui:
-    image: ghcr.io/slippyex/sunsteer/control-ui:${SUNSTEER_VERSION:-0.4.0}
+    image: ghcr.io/slippyex/sunsteer/control-ui:${SUNSTEER_VERSION:-0.4.1}
     build: ../../services/control-ui
     environment:
       PV_LAT: "52.52"
@@ -116,7 +116,7 @@ services:
         limits: { cpus: "0.5", memory: 256M }
 
   heatpump-exporter:
-    image: ghcr.io/slippyex/sunsteer/heatpump-exporter:${SUNSTEER_VERSION:-0.4.0}
+    image: ghcr.io/slippyex/sunsteer/heatpump-exporter:${SUNSTEER_VERSION:-0.4.1}
     build: ../../services/heatpump-exporter
     environment:
       HEATPUMP_DRIVER: mock

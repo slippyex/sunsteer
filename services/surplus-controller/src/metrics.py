@@ -15,6 +15,9 @@ STATE_AGE = Gauge("surplus_control_state_age_seconds", "Age of the SHM reading t
 AVAILABLE = Gauge("surplus_control_available_watts",
                   "Load-compensated surplus the decision used (surplus + WP estimate when on). "
                   "This — not raw grid import — is what the controller acts on.")
+SUN_ELEVATION = Gauge("surplus_control_sun_elevation_deg",
+                      "Current solar elevation at the PV site (degrees). Below the configured "
+                      "minimum the load-compensation is disabled so the WP is released after dark.")
 SWITCHES = Counter("surplus_control_switch_total", "Switch actions", ["action"])
 SHELLY_ERRORS = Counter("surplus_control_shelly_write_errors_total", "Failed Shelly writes")
 LOOP_ERRORS = Counter("surplus_control_loop_errors_total", "Loop exceptions caught (degraded, not fatal)", ["stage"])

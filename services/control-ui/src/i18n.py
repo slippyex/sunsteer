@@ -66,6 +66,8 @@ S = {
     "why_on_streak":      ("{n}/{d} Zyklen über Schwelle", "{n}/{d} cycles above threshold"),
     "why_minoff_wait":    ("warte Mindestpause", "waiting out min pause"),
     "why_minoff_left":    ("noch {m} min", "{m} min left"),
+    "why_sun_down":     ("Sonne unter dem Horizont – kein PV-Überschuss möglich",
+                         "Sun below the horizon — no PV surplus possible"),
 
     # ── ticker ─────────────────────────────────────────────────────────────
     "ticker_unknown": ("WP –", "HP –"),

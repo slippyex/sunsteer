@@ -82,6 +82,9 @@ def explain(status, cfg, lang="en"):
                 "detail": t("why_available_ok", net=net, a=avail, o=off_thr),
                 "bar_label": "", "bar_pct": 0}
     else:
+        if reason == "sun_below_horizon":
+            return {"state": "off", "headline": t("why_off"),
+                    "detail": t("why_sun_down"), "bar_label": "", "bar_pct": 0}
         if reason == "waiting_min_offtime":
             total, elapsed = status.get("min_offtime_s", 0), status.get("secs_since_off", 0)
             return {"state": "off", "headline": t("why_off"),

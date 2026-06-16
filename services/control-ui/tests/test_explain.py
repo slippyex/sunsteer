@@ -106,3 +106,13 @@ def test_explain_stale_english():
     r = explain(s(relay_on=False, state_fresh=False, state_age_s=47,
                   reason="state_stale_failsafe"), CFG, lang="en")
     assert "stale" in r["headline"].lower() and "for 47 s" in r["detail"]
+
+
+def test_explain_sun_below_horizon():
+    from src.explain import explain
+    status = {"mode": "auto", "relay_on": False, "state_fresh": True,
+              "surplus_w": -565, "effective_threshold_w": 1500,
+              "reason": "sun_below_horizon"}
+    out = explain(status, {}, lang="en")
+    assert out["state"] == "off"
+    assert "sun" in out["detail"].lower()

@@ -26,7 +26,7 @@ spec:
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: surplus-controller
-          image: ghcr.io/slippyex/sunsteer/surplus-controller:0.4.0  # pinned; kustomize images: bumps it too
+          image: ghcr.io/slippyex/sunsteer/surplus-controller:0.4.1  # pinned; kustomize images: bumps it too
           imagePullPolicy: IfNotPresent
           env:
             - { name: PYTHONDONTWRITEBYTECODE, value: "1" }   # readOnlyRootFilesystem

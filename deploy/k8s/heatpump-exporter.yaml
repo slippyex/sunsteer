@@ -30,7 +30,7 @@ spec:
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: heatpump-exporter
-          image: ghcr.io/slippyex/sunsteer/heatpump-exporter:0.4.0  # pinned; kustomize images: bumps it too
+          image: ghcr.io/slippyex/sunsteer/heatpump-exporter:0.4.1  # pinned; kustomize images: bumps it too
           imagePullPolicy: IfNotPresent
           env:
             - { name: PYTHONDONTWRITEBYTECODE, value: "1" }   # readOnlyRootFilesystem

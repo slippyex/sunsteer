@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [0.4.1] - 2026-06-16
+
+A correctness fix to the surplus calculation, plus its observability. No breaking changes.
+
+### Fixed
+- The load-compensated surplus is now **sun-aware**: below `PV_SUN_MIN_ELEVATION_DEG`
+  (default 3°) the compensation is disabled, so the heat pump is released after dark instead
+  of being held ON on grid power. Previously the fixed `+ wp_nominal` compensation could keep
+  the SG-Ready relay ON past sunset (observed: relay still on at ~00:00 with the WP idle).
+
+### Added
+- `PV_SUN_MIN_ELEVATION_DEG` (default `3.0`) to tune the elevation gate.
+- Gauge `surplus_control_sun_elevation_deg`; the UI "why" card shows *"Sun below the horizon"*
+  when idle after dark.
+
 ## [0.4.0] - 2026-06-16
 
 Generic, vendor-neutral heat-pump telemetry. **Breaking:** the ViCare-specific service, DB table
@@ -230,7 +245,8 @@ Initial public release.
 - Docker Compose stack, a zero-config demo (`docker-compose.demo.yml`), and multi-arch
   (`amd64` + `arm64`) images on GHCR.
 
-[Unreleased]: https://github.com/slippyex/sunsteer/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/slippyex/sunsteer/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/slippyex/sunsteer/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/slippyex/sunsteer/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/slippyex/sunsteer/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/slippyex/sunsteer/compare/v0.3.0...v0.3.1

@@ -5,7 +5,7 @@ import os
 import threading
 import time
 import urllib.request
-from datetime import datetime
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 from prometheus_client import start_http_server
@@ -13,6 +13,7 @@ from prometheus_client import start_http_server
 from . import config, dblog, metrics, relays, status_server
 from .forecast import fetch_all, fetch_gti, pv_estimate
 from .statemachine import decide
+from .sun import sun_elevation
 from .threshold import adaptive_threshold, available_surplus
 
 _log = logging.getLogger(__name__)
@@ -62,6 +63,17 @@ STARTUP_LONG_AGO_S = 10_000
 HEARTBEAT_BUDGET_S = max(60.0, 4 * LOOP_S)
 PV_LAT = os.environ.get("PV_LAT")           # required — validated in main()
 PV_LON = os.environ.get("PV_LON")           # required — validated in main()
+
+
+def _sun_min_elev():
+    try:
+        v = float(os.environ.get("PV_SUN_MIN_ELEVATION_DEG", "3.0"))
+    except (TypeError, ValueError):
+        return 3.0
+    return v if -18.0 <= v <= 90.0 else 3.0
+
+
+SUN_MIN_ELEVATION_DEG = _sun_min_elev()
 PV_TZ = os.environ.get("PV_TZ", "UTC")      # forecast.solar returns local timestamps
 # roof planes as JSON: [[declination, azimuth, kwp], ...]  (azimuth: 0=S, -90=E, +90=W)
 try:
@@ -110,14 +122,20 @@ def _num(x):
 
 
 def decide_action(cfg, relay_on, state_fresh, fresh_for_decide, surplus, eff,
-                  on_streak, off_streak, secs_since_on, secs_since_off):
+                  on_streak, off_streak, secs_since_on, secs_since_off, sun_up):
     """Pure core of one control cycle (no I/O): from the post-reconcile relay state and the
     fresh inputs, compute the load-compensated available surplus, the updated hysteresis
-    streaks, and the decision. Returns (avail, on_streak, off_streak, target, action, reason)."""
+    streaks, and the decision. Returns (avail, on_streak, off_streak, target, action, reason).
+
+    `sun_up` gates the load-compensation: with the sun below the horizon no real PV is
+    possible, so adding the WP's nominal power back would be a phantom surplus that keeps the
+    WP running on grid power after dark — disable the compensation (pass 0.0) when sun is down."""
     if state_fresh:
         # Load-compensate so on/off compare "surplus without the WP" -> no self-oscillation
-        # from the WP's own draw depressing the SHM reading while it runs.
-        avail = available_surplus(surplus, relay_on, cfg["wp_nominal_power_w"])
+        # from the WP's own draw depressing the SHM reading while it runs. Only while the sun is
+        # up: after dark the +nominal would be a phantom surplus keeping the WP on grid power.
+        avail = available_surplus(surplus, relay_on,
+                                  cfg["wp_nominal_power_w"] if sun_up else 0.0)
         on_streak = on_streak + 1 if avail > eff else 0
         off_streak = off_streak + 1 if avail < cfg["threshold_off_w"] else 0
     else:
@@ -288,9 +306,19 @@ def main():
                 last_on, last_off = (now, last_off) if shelly_on else (last_on, now)
 
             # Pure decision core (load-compensation + hysteresis streaks + decide()).
+            # Read lat/lon from the env at call time (validate_env guarantees they're present)
+            # so the gate works regardless of import ordering. Keep the sun maths OUT of the
+            # control-fault path: if the location can't be read, fail to the SAFE side
+            # (sun_up=False -> no compensation -> the WP is released), never crash the cycle.
+            try:
+                sun_elev = sun_elevation(float(os.environ["PV_LAT"]), float(os.environ["PV_LON"]),
+                                         datetime.now(UTC))
+                sun_up = sun_elev >= SUN_MIN_ELEVATION_DEG
+            except (KeyError, TypeError, ValueError):
+                sun_elev, sun_up = None, False
             avail, on_streak, off_streak, target, action, reason = decide_action(
                 cfg, relay_on, state_fresh, fresh_for_decide, surplus, eff,
-                on_streak, off_streak, now - last_on, now - last_off)
+                on_streak, off_streak, now - last_on, now - last_off, sun_up)
 
             relay_before = relay_on
             if action in ("switched_on", "switched_off"):
@@ -328,13 +356,18 @@ def main():
                 wp_est = cfg["wp_nominal_power_w"] if relay_on else 0.0
                 metrics.update(cfg["mode"], relay_on, eff, fc, wp_est,
                                state_fresh=state_fresh, state_age_s=age, available_w=avail)
+                if sun_elev is not None:
+                    metrics.SUN_ELEVATION.set(sun_elev)
+                status_reason = reason
+                if not sun_up and not relay_on and action not in ("switched_on", "switched_off"):
+                    status_reason = "sun_below_horizon"
                 status_server.set_status(
                     mode=cfg["mode"], relay_on=relay_on, surplus_w=surplus, available_w=avail,
                     effective_threshold_w=eff, on_streak=on_streak, off_streak=off_streak,
                     on_delay_cycles=cfg["on_delay_cycles"], off_delay_cycles=cfg["off_delay_cycles"],
                     secs_since_on=int(now - last_on), secs_since_off=int(now - last_off),
                     min_runtime_s=cfg["min_runtime_s"], min_offtime_s=cfg["min_offtime_s"],
-                    loop_seconds=LOOP_S, reason=reason, state_fresh=state_fresh, state_age_s=age)
+                    loop_seconds=LOOP_S, reason=status_reason, state_fresh=state_fresh, state_age_s=age)
             except Exception:
                 metrics.LOOP_ERRORS.labels("reporting").inc()
         except Exception:
