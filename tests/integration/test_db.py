@@ -128,3 +128,42 @@ def test_daily_production_survives_a_midday_counter_reset():
     c.close()
     assert len(produced) == 1
     assert abs(produced[0] - 6.0) < 0.01            # real production, not the ~1004 lifetime span
+
+
+def test_harvest_summary_self_and_wasted():
+    import importlib
+    _drop_src_modules()
+    sys.path.insert(0, os.path.join(ROOT, "services", "control-ui"))
+    sources = importlib.import_module("src.sources")
+    c = _conn()
+    with c.cursor() as cur:
+        cur.execute("DELETE FROM energy_meter; DELETE FROM heatpump;")
+        # 10 minutes today: WP ON, surplus +3000 (full PV covers the 2000 W WP) -> self-consumed.
+        cur.execute("""INSERT INTO energy_meter (time, surplus_w, export_w)
+                       SELECT now() - (g||' min')::interval, 3000, 3000 FROM generate_series(1,10) g""")
+        cur.execute("""INSERT INTO heatpump (time, relay_on)
+                       SELECT now() - (g||' min')::interval, true FROM generate_series(1,10) g""")
+        # 10 minutes today: WP OFF, exporting 1500 W -> wasted (could have driven the WP).
+        cur.execute("""INSERT INTO energy_meter (time, surplus_w, export_w)
+                       SELECT now() - (g||' min')::interval, 1500, 1500 FROM generate_series(11,20) g""")
+        cur.execute("""INSERT INTO heatpump (time, relay_on)
+                       SELECT now() - (g||' min')::interval, false FROM generate_series(11,20) g""")
+    h = sources.harvest_summary(c, "today", nominal_w=2000, grid_price=0.30, feed_in=0.08)
+    # self-consumed ~ 2000 W × 10 min = 0.333 kWh; wasted ~ 1500 W × 10 min = 0.25 kWh
+    assert 0.28 < h["self_kwh"] < 0.38
+    assert 0.20 < h["wasted_kwh"] < 0.30
+    assert round(h["self_eur"], 4) == round(h["self_kwh"] * (0.30 - 0.08), 4)
+    assert round(h["wasted_eur"], 4) == round(h["wasted_kwh"] * (0.30 - 0.08), 4)
+
+
+def test_harvest_summary_tolerant_on_bad_conn():
+    import importlib
+    _drop_src_modules()
+    sys.path.insert(0, os.path.join(ROOT, "services", "control-ui"))
+    sources = importlib.import_module("src.sources")
+
+    class Dead:
+        def cursor(self): raise RuntimeError("db down")
+    h = sources.harvest_summary(Dead(), "today", 2000, 0.30, 0.08)
+    assert h == {"self_kwh": None, "self_eur": None, "wasted_kwh": None,
+                 "wasted_eur": None, "cop": None}

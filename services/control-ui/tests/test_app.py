@@ -601,3 +601,54 @@ def test_live_sun_window_none_when_no_metric(monkeypatch):
     v = appmod._live()
     assert v["sun_rise"] is None and v["sun_set"] is None
     assert v["sun_in_window"] is False
+
+
+def test_partials_harvest_renders(monkeypatch):
+    _patch(monkeypatch)
+    monkeypatch.setattr(appmod, "_db", lambda: type("C", (), {"close": lambda self: None})())
+    monkeypatch.setattr(appmod.sources, "load_config",
+                        lambda conn: {"grid_price_eur_kwh": 0.30, "feed_in_tariff_eur_kwh": 0.08,
+                                      "wp_nominal_power_w": 2000})
+    monkeypatch.setattr(appmod.sources, "harvest_summary",
+                        lambda *a, **k: {"self_kwh": 3.5, "self_eur": 0.77, "wasted_kwh": 1.2,
+                                         "wasted_eur": 0.26, "cop": 4.1})
+    c = TestClient(appmod.app)
+    r = c.get("/partials/harvest?range=week")
+    assert r.status_code == 200
+    assert "0.77" in r.text and "week" in r.text.lower()
+
+
+def test_partials_harvest_defaults_and_tolerates_none(monkeypatch):
+    _patch(monkeypatch)
+    monkeypatch.setattr(appmod, "_db", lambda: type("C", (), {"close": lambda self: None})())
+    monkeypatch.setattr(appmod.sources, "load_config", lambda conn: {})
+    monkeypatch.setattr(appmod.sources, "harvest_summary",
+                        lambda *a, **k: {"self_kwh": None, "self_eur": None, "wasted_kwh": None,
+                                         "wasted_eur": None, "cop": None})
+    c = TestClient(appmod.app)
+    r = c.get("/partials/harvest")           # no range -> defaults to today
+    assert r.status_code == 200              # renders, no 500
+
+
+def test_partials_status_shows_headroom_basis(monkeypatch):
+    _patch(monkeypatch)
+    monkeypatch.setattr(appmod, "_live", lambda: {
+        "surplus": 1500, "threshold": 2000, "production": 4000, "consumption": 500,
+        "wp_power": 2000, "relay": 1, "self_consumption": 0.5, "autarky": 0.5,
+        "sun_elevation": 40, "sun_in_window": True, "sun_rise": "06:00", "sun_set": "21:00",
+        "available": 3450, "base_load": 550, "basis_production": True,
+        "health": {"shm": True, "shelly": True, "wr": True, "controller": True}})
+    c = TestClient(appmod.app)
+    r = c.get("/partials/status")
+    assert r.status_code == 200
+    assert "3450" in r.text and "550" in r.text   # headroom + base-load rendered
+
+
+def test_index_shows_version(monkeypatch):
+    _patch(monkeypatch)
+    monkeypatch.setattr(appmod, "VERSION", "9.9.9")
+    monkeypatch.setattr(appmod, "_db", lambda: type("C", (), {"close": lambda self: None})())
+    c = TestClient(appmod.app)
+    r = c.get("/")
+    assert r.status_code == 200
+    assert "9.9.9" in r.text

@@ -19,6 +19,15 @@
   {{ t('sun') }} <b class="{{ 'c' if L.sun_in_window else 'a' }}">☀ {{ (L.sun_elevation|round|int) if L.sun_elevation is not none else '–' }}°</b>{% if L.sun_rise %} <span class="txt-a">{{ t('pv_window') }} {{ L.sun_rise }}–{{ L.sun_set }}</span>{% endif %}
 </div>
 
+{# ── Real PV headroom: production − base_load (0.5.0) ──────────────── #}
+<div class="kv" style="margin-top:6px;">
+  {{ t('kpi_headroom') }} <b class="c">{{ (L.available|round|int) if L.available is not none else '–' }} W</b><br>
+  {{ t('headroom_basis') }}
+  {% if L.basis_production %}<b class="g">{{ t('basis_production') }}</b>
+    <span class="txt-a">({{ t('kpi_base_load') }} {{ (L.base_load|round|int) if L.base_load is not none else '–' }} W)</span>
+  {% else %}<b class="a">{{ t('basis_nominal') }}</b>{% endif %}
+</div>
+
 {# ── Health indicators ─────────────────────────────────────────────── #}
 <div class="kv" style="margin-top:6px;">
   {% for key, name in [('shm','SHM'),('shelly','Shelly'),('wr','WR'),('controller','Controller')] %}

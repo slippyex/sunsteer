@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [0.5.1] - 2026-06-16
+
+### Added
+- A **PV harvest** card in the web UI: per range (today / week / month / quarter / year), the
+  € saved by self-consuming PV in the heat pump, the surplus wasted (exported while the pump
+  was off), as a green/amber split, plus the COP/SPF trend.
+- The live cockpit now surfaces the **0.5.0 PV-headroom basis**: the real headroom
+  (production − base load), the household base load, and whether the controller is on the
+  production path or the warm-up/no-inverter nominal fallback.
+- The running **version** is shown in the web-UI header (`SUNSTEER_VERSION`), so a rollout is
+  visible at a glance.
+
 ## [0.5.0] - 2026-06-16
 
 ### Changed
@@ -269,7 +281,8 @@ Initial public release.
 - Docker Compose stack, a zero-config demo (`docker-compose.demo.yml`), and multi-arch
   (`amd64` + `arm64`) images on GHCR.
 
-[Unreleased]: https://github.com/slippyex/sunsteer/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/slippyex/sunsteer/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/slippyex/sunsteer/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/slippyex/sunsteer/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/slippyex/sunsteer/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/slippyex/sunsteer/compare/v0.4.0...v0.4.1

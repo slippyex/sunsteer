@@ -60,6 +60,8 @@ body{background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:13p
         padding:8px 16px;border-bottom:1px solid var(--line);background:var(--panel);}
 .brand{font-family:var(--mono);font-weight:600;letter-spacing:3px;color:var(--cyan);font-size:13px;}
 .brand .sub{color:var(--dim);letter-spacing:1px;font-weight:400;font-size:10px;margin-left:10px;}
+.brand .ver{font-size:.62rem;font-weight:600;letter-spacing:.04em;color:var(--dim);
+  border:1px solid var(--line);border-radius:3px;padding:1px 5px;margin-left:8px;vertical-align:middle;}
 .topbar .right{font-family:var(--mono);font-size:11px;color:var(--mute);display:flex;gap:16px;align-items:center;}
 .led{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);
      box-shadow:0 0 8px rgba(70,224,124,.8);margin-right:6px;vertical-align:1px;}
@@ -160,6 +162,16 @@ html, body, .modal, .minichart, .chart, .pbody, [style*="overflow"] {
    containers once scrollbar-width is set, so target the modal directly */
 .modal::-webkit-scrollbar { width:7px; height:7px; }
 .modal::-webkit-scrollbar-thumb { background:var(--line); }
+
+/* harvest report: range tabs + self-vs-wasted stacked bar */
+.rtabs{display:flex;gap:4px;margin-bottom:10px;flex-wrap:wrap;}
+.rtabs button{background:transparent;border:1px solid var(--line);color:var(--mute);
+  font-family:var(--mono);font-size:10px;letter-spacing:1px;padding:4px 8px;cursor:pointer;}
+.rtabs button.on{background:rgba(95,212,232,.12);border-color:var(--cyandk);color:var(--cyan);}
+.stack{display:flex;height:10px;overflow:hidden;background:var(--line);margin:8px 0 4px;}
+.stack i{display:block;height:100%;}
+.stack .self{background:var(--green);}
+.stack .waste{background:var(--amber);}
 
 /* ── 4. Responsive (media queries last, so mobile overrides win over base) ── */
 @media (max-width:900px){

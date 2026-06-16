@@ -1,0 +1,28 @@
+{# Range tabs — htmx swaps this whole card #}
+<div class="rtabs">
+  {% for r in ranges %}
+  <button class="{{ 'on' if r == rng else '' }}"
+          hx-get="/partials/harvest?range={{ r }}" hx-target="#harvest" hx-swap="innerHTML">
+    {{ t('range_' ~ r) }}
+  </button>
+  {% endfor %}
+</div>
+
+{# € saved — headline #}
+<div class="num txt-c">{{ "%.2f"|format(h.self_eur) if h.self_eur is not none else '–' }}<small> €</small></div>
+<div class="lbl">{{ t('harvest_saved') }}</div>
+
+{# Stacked bar: self-consumed (green) vs wasted (amber) #}
+<div class="stack" title="{{ t('self_consumption') }} / {{ t('harvest_wasted') }}">
+  <i class="self" style="width: {{ h.self_pct }}%"></i>
+  <i class="waste" style="width: {{ h.wasted_pct }}%"></i>
+</div>
+<div class="row2">
+  <span class="txt-g">{{ h.self_kwh if h.self_kwh is not none else '–' }} kWh {{ t('self_consumption') }}</span>
+  <span class="txt-a">{{ h.wasted_kwh if h.wasted_kwh is not none else '–' }} kWh {{ t('harvest_wasted') }}</span>
+</div>
+
+<div class="kv" style="margin-top:8px;">
+  {{ t('harvest_wasted_eur') }} <b class="a">{{ "%.2f"|format(h.wasted_eur) if h.wasted_eur is not none else '–' }} €</b><br>
+  {{ t('cop') }} <b>{{ h.cop if h.cop is not none else '–' }}</b> <small class="txt-dim">{{ t('cop_lag_note') }}</small>
+</div>

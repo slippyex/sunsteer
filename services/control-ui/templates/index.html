@@ -15,7 +15,7 @@
 
   {# ── Topbar ──────────────────────────────────────────────────────── #}
   <div class="topbar">
-    <div class="brand">SUNSTEER<span class="sub">{{ t('subtitle') }}</span></div>
+    <div class="brand">SUNSTEER<span class="sub">{{ t('subtitle') }}</span><span class="ver">v{{ version }}</span></div>
     <div class="right">
       <span id="ticker-slot" hx-get="/partials/ticker" hx-trigger="load, every 4s" hx-swap="innerHTML"></span>
       <input type="checkbox" id="burgerToggle" class="burger-toggle">
@@ -62,6 +62,14 @@
         <h2>{{ t('weather_today') }} <span class="tag"></span></h2>
         <div class="pbody">
           <div id="balance" hx-get="/partials/balance" hx-trigger="load, every 60s" hx-swap="innerHTML"></div>
+        </div>
+      </div>
+
+      {# PV-ERNTE panel: harvest (self-consumption vs wasted, per range) #}
+      <div class="panel">
+        <h2>{{ t('harvest_title') }} <span class="tag"></span></h2>
+        <div class="pbody">
+          <div id="harvest" hx-get="/partials/harvest" hx-trigger="load, every 300s" hx-swap="innerHTML"></div>
         </div>
       </div>
 

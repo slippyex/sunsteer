@@ -32,6 +32,7 @@ def _pos_int(name, default, hi=65535):
 
 PROM = os.environ.get("PROMETHEUS_URL", "http://prometheus:9090")
 GRAFANA = os.environ.get("GRAFANA_URL", "")        # empty -> Grafana link hidden in the UI
+VERSION = os.environ.get("SUNSTEER_VERSION", "dev")  # deploy-time tag, shown in the topbar brand
 WEATHER_LOCATION = os.environ.get("WEATHER_LOCATION", "")  # empty -> weather panel shows just "Weather"
 HEATPUMP_LABEL = os.environ.get("HEATPUMP_LABEL", "").strip()  # empty -> vendor tag hidden in heat-pump card
 
@@ -175,6 +176,9 @@ _LIVE = {
     "threshold": "surplus_control_effective_threshold_watts",
     "remaining_kwh": "surplus_control_forecast_remaining_kwh",
     "self_consumption": "energy:self_consumption_ratio", "autarky": "energy:autarky_ratio",
+    "available": "surplus_control_available_watts",
+    "base_load": "surplus_control_base_load_watts",
+    "basis": "surplus_control_available_basis",
     "shm_last_ts": "sma_shm_last_telegram_timestamp_seconds",
     "shelly_reachable": "shelly_reachable", "inverter_reachable": "sma_inverter_reachable",
     "controller_up": 'up{job="surplus-controller"}',
@@ -224,7 +228,7 @@ def render(request: Request, template: str, **ctx):
     """TemplateResponse with the request's language + a bound translate function `t` injected,
     so every template (and every include) can call {{ t('key') }}."""
     lang = i18n.get_lang(request)
-    ctx.update(request=request, lang=lang,
+    ctx.update(request=request, lang=lang, version=VERSION,
                t=lambda key, default=None, **fmt: i18n.t(lang, key, default=default, **fmt))
     return templates.TemplateResponse(request, template, ctx)
 
@@ -289,6 +293,9 @@ def _live():
     v["sun_rise"] = datetime.fromtimestamp(rts, ZoneInfo(WTZ)).strftime("%H:%M") if rts else None
     v["sun_set"] = datetime.fromtimestamp(sts, ZoneInfo(WTZ)).strftime("%H:%M") if sts else None
     v["sun_in_window"] = bool(rts and sts and rts <= now <= sts)
+    # 0.5.0: available_basis == 1 -> controller is on the production−base_load path; else the
+    # nominal/sun-gated fallback (estimator warming up, or no fresh inverter production).
+    v["basis_production"] = v.get("basis") == 1
     return v
 
 
@@ -411,6 +418,23 @@ def balance(request: Request):
     sm["eur_today"] = explain.effectiveness_eur(sm["wp_today_kwh"], grid, feed)
     sm["eur_total"] = explain.effectiveness_eur(sm["wp_total_kwh"], grid, feed)
     return render(request, "partials/balance.html", b=sm)
+
+
+@app.get("/partials/harvest", response_class=HTMLResponse)
+def harvest(request: Request):
+    rng = request.query_params.get("range", "today")
+    if rng not in sources._HARVEST_RANGES:
+        rng = "today"
+    with _db_optional() as conn:
+        cfg = sources.load_config(conn)
+        grid = float(cfg.get("grid_price_eur_kwh") or 0.30)
+        feed = float(cfg.get("feed_in_tariff_eur_kwh") or 0.08)
+        nominal = float(cfg.get("wp_nominal_power_w") or 2000)
+        h = sources.harvest_summary(conn, rng, nominal, grid, feed)
+    total = (h.get("self_kwh") or 0) + (h.get("wasted_kwh") or 0)
+    h["self_pct"] = round(100 * (h.get("self_kwh") or 0) / total) if total else 0
+    h["wasted_pct"] = 100 - h["self_pct"] if total else 0
+    return render(request, "partials/harvest.html", h=h, rng=rng, ranges=sources._HARVEST_RANGES)
 
 
 @app.get("/partials/heatpump", response_class=HTMLResponse)

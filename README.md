@@ -66,7 +66,12 @@ account is needed. Tear down with `docker compose -f docker-compose.demo.yml dow
   fail-closed behind HTTP Basic auth. See [docs/architecture.md](docs/architecture.md).
 - **Explainable** — every decision lands in a decision log with its reason; the UI's
   "why" card explains in plain language (English/German) what the controller is
-  waiting for right now.
+  waiting for right now. The cockpit also shows the live **PV headroom basis** —
+  whether the controller is on the real `production − base_load` path or the warm-up
+  fallback — and the running version in the header.
+- **PV harvest report** — a UI card shows, per range (today / week / month / quarter /
+  year), the € saved by self-consuming PV in the heat pump and the surplus left on the
+  table (exported while the pump was off), with the COP/SPF trend.
 - **Runtime tuning in the UI** — thresholds, delays, runtimes and prices live in the
   database and hot-reload every control cycle. Static hardware config stays in `.env`.
 - **Observable** — Prometheus metrics from every service, optional Grafana add-on,

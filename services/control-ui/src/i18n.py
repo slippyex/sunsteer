@@ -39,6 +39,11 @@ S = {
     "autarky":          ("Autarkie", "Self-sufficiency"),
     "sun":              ("Sonne", "Sun"),
     "pv_window":        ("PV-Fenster", "PV window"),
+    "kpi_headroom":    ("PV-Headroom (WP)", "PV headroom (HP)"),
+    "headroom_basis":  ("Basis", "Basis"),
+    "basis_production": ("Produktion − Grundlast", "production − base load"),
+    "basis_nominal":   ("Schätzung (Aufwärmphase / kein WR)", "estimate (warm-up / no inverter)"),
+    "kpi_base_load":   ("Grundlast", "base load"),
 
     # ── why card (rendered in explain.py) ──────────────────────────────────
     "why_unknown":        ("Status nicht verfügbar", "Status unavailable"),
@@ -83,6 +88,19 @@ S = {
     "estimated":        ("(geschätzt ⓘ)", "(estimated ⓘ)"),
     "total_lc":         ("gesamt", "total"),
     "wp_runtime_today": ("WP-Laufzeit heute", "HP runtime today"),
+
+    # ── harvest report (PV self-consumption per range) ──────────────────────
+    "range_today":   ("Heute", "Today"),
+    "range_week":    ("Woche", "Week"),
+    "range_month":   ("Monat", "Month"),
+    "range_quarter": ("Quartal", "Quarter"),
+    "range_year":    ("Jahr", "Year"),
+    "harvest_title": ("PV-Ernte", "PV harvest"),
+    "harvest_saved": ("gespart durch PV-Eigenverbrauch", "saved via PV self-consumption"),
+    "harvest_wasted": ("verschenkt", "wasted"),
+    "harvest_wasted_eur": ("verschenkt", "left on the table"),
+    "cop":           ("COP/SPF", "COP/SPF"),
+    "cop_lag_note":  ("(Telemetrie ~3 Tage Verzug)", "(telemetry lags ~3 days)"),
 
     # ── heat-pump card ─────────────────────────────────────────────────────
     "dhw_tank":     ("WW-Speicher", "DHW tank"),

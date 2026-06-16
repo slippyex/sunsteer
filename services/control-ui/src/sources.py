@@ -360,6 +360,52 @@ def wp_savings(conn, window, nominal_w, grid_price, feed_in):
     return out
 
 
+# Calendar-aligned ranges for the harvest report -> the date_trunc unit for "since start of".
+_HARVEST_RANGES = ("today", "week", "month", "quarter", "year")
+_HARVEST_UNIT = {"today": "day", "week": "week", "month": "month",
+                 "quarter": "quarter", "year": "year"}
+
+
+def harvest_summary(conn, range_key, nominal_w, grid_price, feed_in):
+    """Self-consumption vs wasted-surplus for a calendar range. All-tolerant -> None values
+    on any error. self_kwh: PV the WP self-consumed (surplus reconstructed to surplus+nominal,
+    clamped to [0, nominal], over minutes the relay was ON). wasted_kwh: PV exported while the
+    relay was OFF, capped at the WP's nominal draw (what it could have absorbed). € = kWh ×
+    (grid_price - feed_in). cop: representative SCOP over the range (telemetry lags ~3 days)."""
+    none = {"self_kwh": None, "self_eur": None, "wasted_kwh": None, "wasted_eur": None, "cop": None}
+    unit = _HARVEST_UNIT.get(range_key)
+    if unit is None:
+        return none
+    n = nominal_w or 0
+    spread = (grid_price or 0) - (feed_in or 0)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                # 1-minute buckets first -> the outer sums are watt-MINUTES -> /60000.0 = kWh,
+                # cadence-independent (same idiom as wp_savings).
+                "WITH wp AS (SELECT time_bucket('1 minute'::interval, time) m, bool_or(relay_on) on_ "
+                "  FROM heatpump WHERE time >= date_trunc(%s, now()) GROUP BY m), "
+                "sm AS (SELECT time_bucket('1 minute'::interval, time) m, avg(surplus_w) surplus, "
+                "  avg(export_w) exp FROM energy_meter WHERE time >= date_trunc(%s, now()) GROUP BY m) "
+                "SELECT "
+                "  coalesce(sum(CASE WHEN wp.on_ THEN least(greatest(sm.surplus + %s, 0), %s) END), 0)/60000.0, "
+                "  coalesce(sum(CASE WHEN NOT wp.on_ THEN least(greatest(sm.exp, 0), %s) END), 0)/60000.0 "
+                "FROM wp JOIN sm USING (m)",
+                (unit, unit, n, n, n))
+            self_kwh, wasted_kwh = cur.fetchone()
+            cur.execute("SELECT round(avg(scop_total)::numeric, 2) FROM heatpump_telemetry "
+                        "WHERE time >= date_trunc(%s, now())", (unit,))
+            cop = cur.fetchone()[0]
+        self_kwh = float(self_kwh)
+        wasted_kwh = float(wasted_kwh)
+        return {"self_kwh": round(self_kwh, 2), "self_eur": round(self_kwh * spread, 2),
+                "wasted_kwh": round(wasted_kwh, 2), "wasted_eur": round(wasted_kwh * spread, 2),
+                "cop": float(cop) if cop is not None else None}
+    except Exception as e:
+        log.warning("harvest_summary: %s", e)
+        return none
+
+
 def wp_timeline_today(conn, start_epoch):
     """Relay on/off since local midnight from the heatpump table (Shelly-sourced, 1-min). Solid
     and independent of controller restarts — the Prometheus gauge has one series per pod, so a
