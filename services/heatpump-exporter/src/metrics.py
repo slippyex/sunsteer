@@ -13,9 +13,10 @@ GAUGES = {f: Gauge(f"heatpump_{f}", f"Heat pump {f}")
 # Generic liveness / health metrics.
 SCRAPE_ERRORS = Counter("heatpump_scrape_errors_total", "Poll/parse errors", ["stage"])
 LAST_SUCCESS = Gauge("heatpump_last_success_timestamp_seconds", "Unix ts of last successful poll")
-# ViCare energy counters lag a few days; expose the API's own readAt so freshness is visible.
+# Some drivers' energy counters lag a few days; expose the source's own readAt so freshness
+# is visible (drivers without a lag, e.g. mock, leave it unset).
 ENERGY_READ_AT = Gauge("heatpump_energy_read_at_timestamp_seconds",
-                       "Unix ts the energy counters were last computed by ViCare")
+                       "Unix ts the energy counters were last computed by the source")
 
 
 def _parse_ts(s):
