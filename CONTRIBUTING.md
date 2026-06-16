@@ -26,8 +26,9 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt pytest
 
 ## Adding support for new hardware
 
-Sunsteer's load-bearing input is the grid meter. Two extension paths, by increasing
-independence:
+Sunsteer's load-bearing input is the grid meter; the relay and the heat-pump telemetry
+are abstracted behind drivers the same way. For the meter, two extension paths by
+increasing independence:
 
 ### 1. In-tree driver (Python, lives in this repo)
 
@@ -50,6 +51,20 @@ Run your own process that serves the documented `/state` JSON contract and point
 controller's `EXPORTER_STATE_URL` at it — see
 [docs/state-interface.md](docs/state-interface.md). No changes to this repo needed.
 If it works well, we'd still love a link or a write-up in an issue.
+
+### Other pluggable drivers
+
+The relay and the heat-pump telemetry are abstracted the same way — implement a small
+driver and register it in `get_relay()` / `get_driver()`:
+
+- **Relay** — `RelayActuator` (write side, in `services/surplus-controller/src/relays/`)
+  and `RelayReader` (read side, in `services/energy-exporter/src/drivers/`), selected with
+  `RELAY_DRIVER`. The actuator contract (including the **required** hardware auto-off
+  watchdog) is in [docs/relay-interface.md](docs/relay-interface.md).
+- **Heat-pump telemetry** — the `HeatPumpDriver` protocol in
+  `services/heatpump-exporter/src/drivers/`, selected with `HEATPUMP_DRIVER` (`vicare` |
+  `mock`). The generic telemetry contract is in
+  [docs/heatpump-interface.md](docs/heatpump-interface.md).
 
 ## Pull requests
 

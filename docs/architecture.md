@@ -7,9 +7,9 @@ its own container image.
 ```mermaid
 flowchart LR
   subgraph MEASURE
-    SHM[SMA Home Manager 2.0<br/>Speedwire multicast] --> EXP[energy-exporter]
-    SHELLY[Shelly Gen2 relay] -->|state poll| EXP
-    INV[SMA inverter<br/>Modbus, optional] --> EXP
+    SHM[Grid meter<br/>METER_DRIVER: sma_shm] --> EXP[energy-exporter]
+    SHELLY[Relay<br/>RELAY_DRIVER: shelly] -->|state poll| EXP
+    INV[PV inverter<br/>Modbus, optional] --> EXP
   end
   subgraph DECIDE
     EXP -->|/state JSON| CTRL[surplus-controller]
@@ -17,7 +17,7 @@ flowchart LR
     CFG[(control_config<br/>hot-reload)] --> CTRL
   end
   subgraph ACT
-    CTRL -->|Switch.Set + auto-off watchdog| SHELLY
+    CTRL -->|switch + auto-off watchdog| SHELLY
     SHELLY -->|SG-Ready contact| HP[Heat pump]
   end
   EXP --> TSDB[(TimescaleDB)]

@@ -101,16 +101,16 @@ Released images (multi-arch, `linux/amd64` + `linux/arm64` — Raspberry Pi work
 ```mermaid
 flowchart LR
   subgraph MEASURE
-    SHM[SMA Home Manager 2.0<br/>Speedwire multicast] --> EXP[energy-exporter]
-    SHELLY[Shelly Gen2 relay] -->|state poll| EXP
-    INV[SMA inverter<br/>Modbus, optional] --> EXP
+    SHM[Grid meter<br/>METER_DRIVER: sma_shm] --> EXP[energy-exporter]
+    SHELLY[Relay<br/>RELAY_DRIVER: shelly] -->|state poll| EXP
+    INV[PV inverter<br/>Modbus, optional] --> EXP
   end
   subgraph DECIDE
     EXP -->|/state JSON| CTRL[surplus-controller]
     OM[Open-Meteo GTI<br/>forecast.solar fallback] --> CTRL
   end
   subgraph ACT
-    CTRL -->|Switch.Set + auto-off watchdog| SHELLY
+    CTRL -->|switch + auto-off watchdog| SHELLY
     SHELLY -->|SG-Ready contact| HP[Heat pump]
   end
   EXP --> TSDB[(TimescaleDB)]
@@ -131,6 +131,10 @@ the numbers come from. Two ways to bring your own meter:
    `services/energy-exporter/src/drivers/` (the built-in `mock` driver is the template).
 2. **Your own exporter:** serve the documented `/state` contract from any process —
    see [docs/state-interface.md](docs/state-interface.md).
+
+The **relay** (`RELAY_DRIVER`) and **heat-pump telemetry** (`HEATPUMP_DRIVER`) are pluggable
+the same way — see [docs/relay-interface.md](docs/relay-interface.md) and
+[docs/heatpump-interface.md](docs/heatpump-interface.md).
 
 Contributions welcome: [CONTRIBUTING.md](CONTRIBUTING.md)
 
