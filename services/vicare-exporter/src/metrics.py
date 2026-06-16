@@ -1,24 +1,27 @@
-"""vicare_* Prometheus metrics."""
+"""heatpump_* Prometheus metrics (generic telemetry contract) + vicare_* vendor-op metrics."""
 import datetime
 
 from prometheus_client import Counter, Gauge
 
-from .extract import FIELDS, STRING_FIELDS
+from .contract import HEATPUMP_FIELDS, HEATPUMP_STRING_FIELDS
 
 # Numeric datapoint gauges (string/text fields like dhw_mode/energy_read_at are not gauged).
-GAUGES = {f: Gauge(f"vicare_{f}", f"ViCare {f}")
-          for f in FIELDS if f not in STRING_FIELDS}
+GAUGES = {f: Gauge(f"heatpump_{f}", f"Heat pump {f}")
+          for f in HEATPUMP_FIELDS if f not in HEATPUMP_STRING_FIELDS}
 
+# Vendor-operational metrics — stay vicare_* until the vendor driver is split out.
 API_CALLS = Counter("vicare_api_calls_total", "ViCare API calls made")
-SCRAPE_ERRORS = Counter("vicare_scrape_errors_total", "Poll/parse errors", ["stage"])
 RATE_LIMITED = Counter("vicare_rate_limited_total", "HTTP 429 / limit responses")
 INVALID_CREDENTIALS = Counter("vicare_invalid_credentials_total",
                               "Connect attempts rejected as invalid credentials (permanent)")
 BUDGET_EXHAUSTED = Gauge("vicare_budget_exhausted", "1 = daily call budget reached, poll skipped")
 BUDGET_USED = Gauge("vicare_budget_used", "API calls used in the trailing 24h window")
-LAST_SUCCESS = Gauge("vicare_last_success_timestamp_seconds", "Unix ts of last successful poll")
+
+# Generic liveness / health metrics.
+SCRAPE_ERRORS = Counter("heatpump_scrape_errors_total", "Poll/parse errors", ["stage"])
+LAST_SUCCESS = Gauge("heatpump_last_success_timestamp_seconds", "Unix ts of last successful poll")
 # ViCare energy counters lag a few days; expose the API's own readAt so freshness is visible.
-ENERGY_READ_AT = Gauge("vicare_energy_read_at_timestamp_seconds",
+ENERGY_READ_AT = Gauge("heatpump_energy_read_at_timestamp_seconds",
                        "Unix ts the energy counters were last computed by ViCare")
 
 

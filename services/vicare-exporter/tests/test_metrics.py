@@ -37,3 +37,16 @@ def test_set_from_skips_non_numeric_value_without_crashing():
     from src import metrics
     metrics.set_from({"dhw_temp_c": "n/a", "compressor_starts": 5})   # one bad, one good
     assert metrics.GAUGES["compressor_starts"]._value.get() == 5      # good value still set
+
+
+def test_gauges_use_generic_heatpump_prefix():
+    from src import metrics
+    # Telemetry gauges are the generic contract the UI reads — heatpump_*, not vicare_*.
+    g = metrics.GAUGES["dhw_temp_c"]
+    assert any(s.name == "heatpump_dhw_temp_c" for s in g.collect())
+
+
+def test_liveness_metric_is_generic():
+    from src import metrics
+    assert any(s.name == "heatpump_last_success_timestamp_seconds"
+               for s in metrics.LAST_SUCCESS.collect())
