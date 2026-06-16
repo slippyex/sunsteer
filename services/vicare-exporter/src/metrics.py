@@ -1,4 +1,5 @@
-"""heatpump_* Prometheus metrics (generic telemetry contract) + vicare_* vendor-op metrics."""
+"""heatpump_* Prometheus metrics — the generic telemetry contract. Vendor-operational metrics
+(e.g. vicare_*) live with their driver (drivers/vicare_metrics.py), not here."""
 import datetime
 
 from prometheus_client import Counter, Gauge
@@ -8,14 +9,6 @@ from .contract import HEATPUMP_FIELDS, HEATPUMP_STRING_FIELDS
 # Numeric datapoint gauges (string/text fields like dhw_mode/energy_read_at are not gauged).
 GAUGES = {f: Gauge(f"heatpump_{f}", f"Heat pump {f}")
           for f in HEATPUMP_FIELDS if f not in HEATPUMP_STRING_FIELDS}
-
-# Vendor-operational metrics — stay vicare_* until the vendor driver is split out.
-API_CALLS = Counter("vicare_api_calls_total", "ViCare API calls made")
-RATE_LIMITED = Counter("vicare_rate_limited_total", "HTTP 429 / limit responses")
-INVALID_CREDENTIALS = Counter("vicare_invalid_credentials_total",
-                              "Connect attempts rejected as invalid credentials (permanent)")
-BUDGET_EXHAUSTED = Gauge("vicare_budget_exhausted", "1 = daily call budget reached, poll skipped")
-BUDGET_USED = Gauge("vicare_budget_used", "API calls used in the trailing 24h window")
 
 # Generic liveness / health metrics.
 SCRAPE_ERRORS = Counter("heatpump_scrape_errors_total", "Poll/parse errors", ["stage"])

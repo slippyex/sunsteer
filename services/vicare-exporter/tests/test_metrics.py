@@ -13,11 +13,18 @@ def test_string_fields_are_not_gauged():
     assert "energy_read_at" not in metrics.GAUGES
 
 
-def test_budget_metrics_exist():
-    assert metrics.API_CALLS is not None
-    assert metrics.BUDGET_EXHAUSTED is not None
-    assert metrics.BUDGET_USED is not None
+def test_generic_liveness_metric_exists():
     assert metrics.LAST_SUCCESS is not None
+
+
+def test_vendor_budget_metrics_live_in_vicare_driver():
+    # The vicare_* operational metrics are driver-internal, not part of the generic
+    # heatpump_* contract — they belong to the vicare driver, not metrics.py.
+    import src.drivers.vicare_metrics as vm
+    assert vm.API_CALLS is not None
+    assert vm.BUDGET_EXHAUSTED is not None
+    assert vm.BUDGET_USED is not None
+    assert not hasattr(metrics, "API_CALLS")
 
 
 def test_energy_read_at_parsed_to_epoch():
