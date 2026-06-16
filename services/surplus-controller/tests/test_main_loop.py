@@ -259,27 +259,42 @@ def test_non_numeric_state_field_degrades_to_blind_not_a_crash(monkeypatch):
     assert M.metrics.LOOP_ERRORS.labels("cycle")._value.get() == before_cycle
 
 
-def test_decide_action_sun_down_disables_compensation():
+def test_baseload_fed_only_on_fresh_reads_with_production(monkeypatch):
+    # The estimator is fed WP-excluded consumption (production - surplus) ONLY on a fresh read
+    # carrying production_w — a blind read must never poison the rolling window.
+    fed = []
+
+    class SpyBaseLoad:
+        def update(self, now, consumption_w):
+            fed.append(consumption_w)
+        def estimate(self):
+            return None      # keep the nominal fallback so the decision path is unaffected
+
+    monkeypatch.setattr(M, "_baseload", SpyBaseLoad())
+    states = [dict(fresh(500), production_w=2500), None]   # fresh+production, then blind
+    run_loop(monkeypatch, states, relay_seed=True)
+    assert fed == [2000.0]      # 2500 - 500 once; the blind cycle fed nothing
+
+
+def test_decide_action_high_available_stays_on():
     import src.main as M
     cfg = {"mode": "auto", "manual_relay_on": False, "wp_nominal_power_w": 2000.0,
            "threshold_off_w": 200.0, "on_delay_cycles": 1, "off_delay_cycles": 1,
            "min_runtime_s": 0, "min_offtime_s": 0}
-    avail, on_s, off_s, target, action, reason = M.decide_action(
+    avail, *_rest, target, action, reason = M.decide_action(
         cfg, relay_on=True, state_fresh=True, fresh_for_decide=True,
-        surplus=-565.0, eff=1500.0, on_streak=0, off_streak=0,
-        secs_since_on=9999, secs_since_off=9999, sun_up=False)
-    assert avail == -565.0
-    assert target is False and action == "switched_off"
-
-
-def test_decide_action_sun_up_keeps_compensation_unchanged():
-    import src.main as M
-    cfg = {"mode": "auto", "manual_relay_on": False, "wp_nominal_power_w": 2000.0,
-           "threshold_off_w": 200.0, "on_delay_cycles": 1, "off_delay_cycles": 1,
-           "min_runtime_s": 0, "min_offtime_s": 0}
-    avail, on_s, off_s, target, action, reason = M.decide_action(
-        cfg, relay_on=True, state_fresh=True, fresh_for_decide=True,
-        surplus=-565.0, eff=1500.0, on_streak=0, off_streak=0,
-        secs_since_on=9999, secs_since_off=9999, sun_up=True)
-    assert avail == 1435.0
+        surplus=-565.0, available=1435.0, eff=1500.0, on_streak=0, off_streak=0,
+        secs_since_on=9999, secs_since_off=9999)
     assert target is True
+
+
+def test_decide_action_low_available_releases():
+    import src.main as M
+    cfg = {"mode": "auto", "manual_relay_on": False, "wp_nominal_power_w": 2000.0,
+           "threshold_off_w": 200.0, "on_delay_cycles": 1, "off_delay_cycles": 1,
+           "min_runtime_s": 0, "min_offtime_s": 0}
+    avail, *_rest, target, action, reason = M.decide_action(
+        cfg, relay_on=True, state_fresh=True, fresh_for_decide=True,
+        surplus=-565.0, available=-200.0, eff=1500.0, on_streak=0, off_streak=0,
+        secs_since_on=9999, secs_since_off=9999)
+    assert target is False and action == "switched_off"

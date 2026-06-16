@@ -124,7 +124,7 @@ def _inverter_cycle():
     _last_inverter = read_inverter(INVERTER_HOST, INVERTER_PORT, INVERTER_UNIT)
     metrics.update_inverter(_last_inverter)
     if _last_inverter:
-        state_server.set_state(production_w=_last_inverter["production_w"])
+        state_server.set_production(_last_inverter["production_w"])
     else:
         log.debug("inverter modbus read returned no data (unreachable)")
 

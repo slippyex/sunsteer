@@ -11,10 +11,11 @@ from zoneinfo import ZoneInfo
 from prometheus_client import start_http_server
 
 from . import config, dblog, metrics, relays, status_server
+from .baseload import BaseLoad
 from .forecast import fetch_all, fetch_gti, pv_estimate
 from .statemachine import decide
 from .sun import sun_elevation, sun_window
-from .threshold import adaptive_threshold, available_surplus
+from .threshold import adaptive_threshold, available_and_basis
 
 _log = logging.getLogger(__name__)
 
@@ -125,6 +126,10 @@ def validate_env():
             f"LOOP_SECONDS={LOOP_S} so the watchdog can never fire between re-arms")
 
 _forecast_remaining = None   # kWh, updated by the slow timer
+# Rolling household base-load (consumption minus the WP), driven from /state each fresh cycle.
+# available = production - base_load is the real PV headroom; falls back to the nominal-load
+# compensation until warmed up or while the inverter is stale.
+_baseload = BaseLoad(window_s=3600, percentile=20, min_warmup_s=1200)
 
 
 def _num(x):
@@ -137,25 +142,16 @@ def _num(x):
         return None
 
 
-def decide_action(cfg, relay_on, state_fresh, fresh_for_decide, surplus, eff,
-                  on_streak, off_streak, secs_since_on, secs_since_off, sun_up):
-    """Pure core of one control cycle (no I/O): from the post-reconcile relay state and the
-    fresh inputs, compute the load-compensated available surplus, the updated hysteresis
-    streaks, and the decision. Returns (avail, on_streak, off_streak, target, action, reason).
-
-    `sun_up` gates the load-compensation: with the sun below the horizon no real PV is
-    possible, so adding the WP's nominal power back would be a phantom surplus that keeps the
-    WP running on grid power after dark — disable the compensation (pass 0.0) when sun is down."""
+def decide_action(cfg, relay_on, state_fresh, fresh_for_decide, surplus, available, eff,
+                  on_streak, off_streak, secs_since_on, secs_since_off):
+    """Pure core of one control cycle (no I/O). `available` is the PV surplus the decision
+    acts on (production-based or nominal-fallback, computed by the caller). The blind/stale
+    path still ignores it and fails safe."""
     if state_fresh:
-        # Load-compensate so on/off compare "surplus without the WP" -> no self-oscillation
-        # from the WP's own draw depressing the SHM reading while it runs. Only while the sun is
-        # up: after dark the +nominal would be a phantom surplus keeping the WP on grid power.
-        avail = available_surplus(surplus, relay_on,
-                                  cfg["wp_nominal_power_w"] if sun_up else 0.0)
-        on_streak = on_streak + 1 if avail > eff else 0
-        off_streak = off_streak + 1 if avail < cfg["threshold_off_w"] else 0
+        on_streak = on_streak + 1 if available > eff else 0
+        off_streak = off_streak + 1 if available < cfg["threshold_off_w"] else 0
+        avail = available
     else:
-        # Blind: never compensate (that's what kept the WP on grid power), reset streaks.
         avail = surplus
         on_streak = off_streak = 0
     target, action, reason = decide(
@@ -332,9 +328,19 @@ def main():
                 sun_up = sun_elev >= SUN_MIN_ELEVATION_DEG
             except (KeyError, TypeError, ValueError):
                 sun_elev, sun_up = None, False
+            # Real PV headroom: production - base_load. Drive the base-load estimator with a
+            # MONOTONIC timestamp (an NTP step can't corrupt the rolling window) from the WP-
+            # excluded consumption (production - surplus). Fall back to nominal compensation
+            # until the estimator is warmed up or while the inverter is stale.
+            production = _num(st.get("production_w")) if st else None
+            if production is not None and surplus_raw is not None and state_fresh:
+                _baseload.update(time.monotonic(), production - surplus)
+            base_load = _baseload.estimate()
+            available, basis = available_and_basis(
+                surplus, production, base_load, relay_on, sun_up, cfg["wp_nominal_power_w"])
             avail, on_streak, off_streak, target, action, reason = decide_action(
-                cfg, relay_on, state_fresh, fresh_for_decide, surplus, eff,
-                on_streak, off_streak, now - last_on, now - last_off, sun_up)
+                cfg, relay_on, state_fresh, fresh_for_decide, surplus, available, eff,
+                on_streak, off_streak, now - last_on, now - last_off)
 
             relay_before = relay_on
             if action in ("switched_on", "switched_off"):
@@ -374,6 +380,9 @@ def main():
                                state_fresh=state_fresh, state_age_s=age, available_w=avail)
                 if sun_elev is not None:
                     metrics.SUN_ELEVATION.set(sun_elev)
+                if base_load is not None:
+                    metrics.BASE_LOAD.set(base_load)
+                metrics.AVAILABLE_BASIS.set(1 if basis == "production" else 0)
                 rise_ts, set_ts = _todays_sun_window(datetime.now(ZoneInfo(PV_TZ)))
                 metrics.SUN_RISE.set(rise_ts)
                 metrics.SUN_SET.set(set_ts)

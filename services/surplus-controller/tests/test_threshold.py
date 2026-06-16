@@ -49,3 +49,27 @@ def test_adaptive_threshold_survives_zero_ref():
     cfg = {"threshold_base_w": 2500.0, "threshold_min_w": 1500.0,
            "full_sun_ref_kwh": 0.0, "adapt_enabled": True}
     assert adaptive_threshold(cfg, 10.0) == 2500.0    # degrade to base, no crash
+
+
+def test_available_production_basis():
+    from src.threshold import available_and_basis
+    a, basis = available_and_basis(surplus=-565, production=300, base_load=500,
+                                   relay_on=True, sun_up=False, wp_nominal_power_w=2000)
+    assert a == -200.0 and basis == "production"
+
+
+def test_available_nominal_fallback_when_no_production():
+    from src.threshold import available_and_basis
+    a, basis = available_and_basis(surplus=-565, production=None, base_load=None,
+                                   relay_on=True, sun_up=True, wp_nominal_power_w=2000)
+    assert a == 1435.0 and basis == "nominal"
+    a2, _ = available_and_basis(surplus=-565, production=None, base_load=None,
+                                relay_on=True, sun_up=False, wp_nominal_power_w=2000)
+    assert a2 == -565.0
+
+
+def test_available_fallback_when_base_not_warmed():
+    from src.threshold import available_and_basis
+    a, basis = available_and_basis(surplus=100, production=2000, base_load=None,
+                                   relay_on=False, sun_up=True, wp_nominal_power_w=2000)
+    assert basis == "nominal" and a == 100.0

@@ -26,3 +26,14 @@ def available_surplus(surplus_w, relay_on, wp_nominal_power_w) -> float:
     signal contact and can't meter the WP. Setting wp_nominal_power_w=0 disables it (raw
     surplus, old behaviour)."""
     return surplus_w + (wp_nominal_power_w if relay_on else 0.0)
+
+
+def available_and_basis(surplus, production, base_load, relay_on, sun_up, wp_nominal_power_w):
+    """The PV surplus genuinely free for the WP, plus which basis was used.
+
+    Preferred: `production - base_load` (real headroom; needs fresh inverter production AND a
+    warmed-up base-load). Fallback: today's load-compensation `surplus + wp_nominal` while the
+    relay is on and the sun is up (0.4.1 behaviour) — used when production or base is missing."""
+    if production is not None and base_load is not None:
+        return production - base_load, "production"
+    return available_surplus(surplus, relay_on, wp_nominal_power_w if sun_up else 0.0), "nominal"

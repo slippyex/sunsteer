@@ -45,13 +45,17 @@ never switches anything.
 A deliberately boring loop (default every 15 s):
 
 1. **Read** `/state` and the hot-reloaded `control_config` from the DB.
-2. **Compensate own load:** `available = surplus + (relay_on ? wp_nominal_power : 0)`.
-   Once the heat pump runs, it consumes the very surplus that justified switching it
-   on — without this, the controller would oscillate. **Sun-aware:** the compensation is
-   only applied while the sun is above `PV_SUN_MIN_ELEVATION_DEG` (default 3°). After dark
-   no PV is possible, so the `+ wp_nominal` term would be a phantom surplus that keeps the
-   pump running on grid power; below the elevation the raw (negative) surplus is used and the
-   off-hysteresis releases the pump.
+2. **Real PV headroom:** `available = production − base_load` — how much PV is free for the
+   heat pump after the rest of the house. `base_load` is the 20th-percentile of recent
+   consumption (`production − surplus`) over a 60-min window: the pump cycles, so the window
+   holds its off-troughs, and a low percentile picks out the household baseline while ignoring
+   cooking spikes. This is exact and self-calibrating — no fixed heat-pump nominal, and it
+   can't be fooled into oscillation (the baseline doesn't move when the pump turns on).
+   **Fallback:** when no fresh inverter production is available, the controller reverts to the
+   load-compensation `available = surplus + (relay_on ? wp_nominal : 0)`, **sun-gated** so the
+   `+ wp_nominal` can't become a phantom surplus after dark (below `PV_SUN_MIN_ELEVATION_DEG`,
+   default 3°, the raw surplus is used and the off-hysteresis releases the pump). The
+   `surplus_control_available_basis` metric shows which path is active.
 3. **Adaptive threshold:** `threshold = base − (base − min) × remaining_kwh / full_sun_ref_kwh`,
    with the forecast factor clamped to `[0, 1]`. While plenty of PV is still ahead,
    the threshold sits low — switching on early is safe because the day will sustain

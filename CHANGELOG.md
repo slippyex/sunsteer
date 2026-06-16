@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [0.5.0] - 2026-06-16
+
+### Changed
+- The controller now acts on **real PV headroom**: `available = production − base_load`
+  (base_load = 20th-percentile of recent consumption over a 60-min window) instead of a fixed
+  `surplus + wp_nominal` load-compensation. The heat pump is no longer held ON on grid power
+  when it modulates below its nominal draw. Falls back to the previous (sun-gated) logic when
+  no fresh inverter production is available; the fail-safe chain and the sun-gate are unchanged.
+- The exporter publishes `production_w` in `/state` only while the inverter reading is fresh
+  (dropped after ~90 s stale), so the controller never computes on a frozen value.
+
+### Added
+- Gauges `surplus_control_base_load_watts` and `surplus_control_available_basis`
+  (1 = production-based, 0 = nominal fallback).
+
 ## [0.4.2] - 2026-06-16
 
 ### Added
@@ -254,7 +269,8 @@ Initial public release.
 - Docker Compose stack, a zero-config demo (`docker-compose.demo.yml`), and multi-arch
   (`amd64` + `arm64`) images on GHCR.
 
-[Unreleased]: https://github.com/slippyex/sunsteer/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/slippyex/sunsteer/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/slippyex/sunsteer/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/slippyex/sunsteer/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/slippyex/sunsteer/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/slippyex/sunsteer/compare/v0.3.2...v0.4.0

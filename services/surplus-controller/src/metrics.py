@@ -13,8 +13,9 @@ STATE_FRESH = Gauge("surplus_control_state_fresh",
                     "1 = SHM measurement fresh, 0 = stale/missing -> fail-safe OFF active")
 STATE_AGE = Gauge("surplus_control_state_age_seconds", "Age of the SHM reading the last cycle used")
 AVAILABLE = Gauge("surplus_control_available_watts",
-                  "Load-compensated surplus the decision used (surplus + WP estimate when on). "
-                  "This — not raw grid import — is what the controller acts on.")
+                  "PV headroom the decision acted on: production - base_load (accurate), or the "
+                  "surplus + WP-nominal fallback. This — not raw grid import — is what the "
+                  "controller acts on (see surplus_control_available_basis).")
 SUN_ELEVATION = Gauge("surplus_control_sun_elevation_deg",
                       "Current solar elevation at the PV site (degrees). Below the configured "
                       "minimum the load-compensation is disabled so the WP is released after dark.")
@@ -24,6 +25,12 @@ SUN_RISE = Gauge("surplus_control_sun_rise_timestamp_seconds",
 SUN_SET = Gauge("surplus_control_sun_set_timestamp_seconds",
                 "Unix ts the sun drops below PV_SUN_MIN_ELEVATION_DEG today (end of the PV window); "
                 "NaN on a polar day/night.")
+BASE_LOAD = Gauge("surplus_control_base_load_watts",
+                  "Estimated household base load (consumption excluding the heat pump); the "
+                  "baseline subtracted from PV production to get the surplus available to the WP.")
+AVAILABLE_BASIS = Gauge("surplus_control_available_basis",
+                        "How 'available' was computed: 1 = production - base_load (accurate), "
+                        "0 = surplus + wp_nominal fallback (no fresh inverter production).")
 SWITCHES = Counter("surplus_control_switch_total", "Switch actions", ["action"])
 SHELLY_ERRORS = Counter("surplus_control_shelly_write_errors_total", "Failed Shelly writes")
 LOOP_ERRORS = Counter("surplus_control_loop_errors_total", "Loop exceptions caught (degraded, not fatal)", ["stage"])

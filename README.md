@@ -53,6 +53,10 @@ account is needed. Tear down with `docker compose -f docker-compose.demo.yml dow
   still harvest surplus instead of waiting for a peak that never comes.
 - **Self-calibrating** — the forecast's performance ratio is recalibrated daily from
   your actual production. No manual tuning drift.
+- **Real PV headroom** — the controller acts on `production − base_load` (the surplus left
+  after the rest of the house), learned live from your meter, instead of a fixed heat-pump
+  estimate — so the pump isn't held on grid power when it modulates down. Falls back to a
+  sun-gated estimate when no inverter is present.
 - **Hysteresis done right** — ON/OFF streak requirements, minimum runtimes and
   off-times protect the compressor; no relay flapping on passing clouds.
 - **Sun-aware** — the surplus calculation knows the sun's position; once it's down there is
