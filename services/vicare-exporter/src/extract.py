@@ -10,6 +10,8 @@ Field map + property shapes confirmed against the live E3_Vitocal_16 dump 2026-0
   STAT      -> properties.<sub>.value             (compressor starts/hours)
 """
 
+from .contract import HEATPUMP_FIELDS, HEATPUMP_STRING_FIELDS
+
 _NUM = "num"
 _STR = "str"
 _DAY0 = "day0"
@@ -40,10 +42,11 @@ _FIELDS = {
     "compressor_hours":     ("heating.compressors.0.statistics", _STAT, "hours"),
 }
 
-# Ordered field list — the single source of truth for column + gauge order.
-FIELDS = list(_FIELDS.keys())
-# Non-numeric fields: not turned into Prometheus gauges (text columns only).
-STRING_FIELDS = {"dhw_mode", "energy_read_at"}
+# extract still owns the Viessmann feature->field MAPPING (_FIELDS above); the contract
+# (which keys/order) is shell-owned. Guard that the mapping covers exactly the contract.
+assert list(_FIELDS.keys()) == HEATPUMP_FIELDS, "vicare _FIELDS drifted from HEATPUMP_FIELDS"
+FIELDS = HEATPUMP_FIELDS
+STRING_FIELDS = HEATPUMP_STRING_FIELDS
 
 
 def _index(features):
