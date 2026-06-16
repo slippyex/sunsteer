@@ -13,9 +13,21 @@ from . import vicare_metrics as vm
 
 log = logging.getLogger(__name__)
 
+def _pos_int(name, default, hi=3600):
+    """Parse a positive-int env with a tolerant fallback. A missing, non-numeric,
+    zero/negative or absurd value falls back to the default — a bad value must never crash
+    the exporter at import."""
+    try:
+        v = int(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+    return v if 1 <= v <= hi else default
+
+
 POLL_S = clamp_interval(os.environ.get("HEATPUMP_POLL_SECONDS",
                                        os.environ.get("VICARE_POLL_SECONDS", "300")))
-DAILY_CAP = int(os.environ.get("VICARE_DAILY_CAP", "1400"))
+DAILY_CAP = _pos_int("VICARE_DAILY_CAP", 1400, hi=100000)
+_COOLDOWN_S = 1800
 TOKEN_FILE = os.environ.get("VICARE_TOKEN_FILE", "/data/vicare_token.json")
 BUDGET_FILE = os.environ.get("VICARE_BUDGET_FILE", "/data/vicare_budget.json")
 REQUIRED_ENV = ("VICARE_USER", "VICARE_PASS", "VICARE_CLIENT_ID")
@@ -106,6 +118,7 @@ class VicareDriver:
     def __init__(self):
         self._device = None
         self._budget = RateBudget(cap=DAILY_CAP, window_s=86400, persist_path=BUDGET_FILE)
+        self._cooldown_until = 0.0
 
     def _ensure_connected(self):
         if self._device is None:
@@ -114,14 +127,25 @@ class VicareDriver:
             secure_token_file(TOKEN_FILE)
 
     def poll(self):
-        self._ensure_connected()
         now = time.time()
+        if now < self._cooldown_until:
+            return None                      # stay quiet after a 429 — don't hammer the API
+        self._ensure_connected()             # may SystemExit on permanent bad creds (intended crash)
         if not self._budget.allow(now):
             vm.BUDGET_EXHAUSTED.set(1)
             vm.BUDGET_USED.set(self._budget.count(now))
             return None
         vm.BUDGET_EXHAUSTED.set(0)
-        features = vicare_client.poll(self._device)
+        try:
+            features = vicare_client.poll(self._device)
+        except Exception as e:
+            if _is_rate_limit(e):
+                vm.RATE_LIMITED.inc()
+                metrics.SCRAPE_ERRORS.labels("rate_limited").inc()
+                self._cooldown_until = now + _COOLDOWN_S
+            else:
+                metrics.SCRAPE_ERRORS.labels("cycle").inc()
+            return None                      # degrade to None per the driver contract
         self._budget.record(now)
         vm.API_CALLS.inc()
         vm.BUDGET_USED.set(self._budget.count(now))

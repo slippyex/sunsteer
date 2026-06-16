@@ -10,7 +10,19 @@ from .ratebudget import clamp_interval
 
 log = logging.getLogger(__name__)
 
-METRICS_PORT = int(os.environ.get("METRICS_PORT", "9125"))
+
+def _pos_int(name, default, hi=3600):
+    """Parse a sleep-/cadence-driving env into a safe positive int. A missing, non-numeric,
+    zero/negative or absurd value falls back to the default — a bad value must never crash
+    the exporter at import or spin a tight loop (sleep 0)."""
+    try:
+        v = int(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+    return v if 1 <= v <= hi else default
+
+
+METRICS_PORT = _pos_int("METRICS_PORT", 9125, hi=65535)
 HEATPUMP_DRIVER = os.environ.get("HEATPUMP_DRIVER", "vicare")
 POLL_S = clamp_interval(os.environ.get("HEATPUMP_POLL_SECONDS",
                                        os.environ.get("VICARE_POLL_SECONDS", "300")))
@@ -45,16 +57,14 @@ def run_cycle(driver, conn):
 
 def _db():
     return tsdb_writer.connect(
-        os.environ["DB_HOST"], int(os.environ.get("DB_PORT", "5432")),
+        os.environ["DB_HOST"], _pos_int("DB_PORT", 5432, hi=65535),
         os.environ["DB_NAME"], os.environ["DB_USER"], os.environ["DB_PASS"])
 
 
 def main():
     validate_env()
     start_http_server(METRICS_PORT)
-    if HEATPUMP_DRIVER not in drivers.SUPPORTED_DRIVERS:
-        raise SystemExit(f"heatpump-exporter: unknown HEATPUMP_DRIVER '{HEATPUMP_DRIVER}'")
-    driver = drivers.get_driver(HEATPUMP_DRIVER)
+    driver = drivers.get_driver(HEATPUMP_DRIVER)   # the single validator for unknown driver names
     conn = None
     backoff = 0
     while True:

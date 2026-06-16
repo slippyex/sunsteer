@@ -117,3 +117,81 @@ def test_required_env_lists_vicare_creds():
     assert "VICARE_USER" in vicare.REQUIRED_ENV
     assert "VICARE_PASS" in vicare.REQUIRED_ENV
     assert "VICARE_CLIENT_ID" in vicare.REQUIRED_ENV
+
+
+class _FakeBudget:
+    def __init__(self, allowed=True):
+        self.allowed = allowed
+        self.records = 0
+
+    def allow(self, now):
+        return self.allowed
+
+    def record(self, now):
+        self.records += 1
+
+    def count(self, now):
+        return self.records
+
+
+def _driver_with_fakes(monkeypatch, budget):
+    """Build a VicareDriver wired to a fake device + fake budget so poll() does no real
+    network/disk: _ensure_connected becomes a no-op once _device is set."""
+    d = vicare.VicareDriver()
+    d._device = object()          # _ensure_connected no-op
+    d._budget = budget
+    return d
+
+
+def test_poll_skips_when_budget_exhausted(monkeypatch):
+    called = {"n": 0}
+    monkeypatch.setattr(vicare.vicare_client, "poll",
+                        lambda dev: called.__setitem__("n", called["n"] + 1))
+    monkeypatch.setattr(vicare, "extract", lambda f: {"x": 1})
+    d = _driver_with_fakes(monkeypatch, _FakeBudget(allowed=False))
+    assert d.poll() is None
+    assert vm.BUDGET_EXHAUSTED._value.get() == 1
+    assert called["n"] == 0       # vendor API not hit when budget is exhausted
+
+
+def test_poll_returns_reading_and_records_budget(monkeypatch):
+    before = vm.API_CALLS._value.get()
+    monkeypatch.setattr(vicare.vicare_client, "poll", lambda dev: "FEATURES")
+    monkeypatch.setattr(vicare, "extract", lambda f: {"dhw_temp_c": 9.0})
+    budget = _FakeBudget(allowed=True)
+    d = _driver_with_fakes(monkeypatch, budget)
+    assert d.poll() == {"dhw_temp_c": 9.0}
+    assert vm.API_CALLS._value.get() == before + 1
+    assert budget.records == 1
+
+
+def test_poll_rate_limit_sets_cooldown(monkeypatch):
+    before = vm.RATE_LIMITED._value.get()
+    calls = {"n": 0}
+
+    def boom(dev):
+        calls["n"] += 1
+        raise Exception("HTTP 429 Too Many Requests")
+
+    monkeypatch.setattr(vicare.vicare_client, "poll", boom)
+    monkeypatch.setattr(vicare, "extract", lambda f: {"x": 1})
+    d = _driver_with_fakes(monkeypatch, _FakeBudget(allowed=True))
+    assert d.poll() is None
+    assert vm.RATE_LIMITED._value.get() == before + 1
+    assert calls["n"] == 1
+    # Cooldown active: a second immediate poll must NOT hit the vendor again.
+    assert d.poll() is None
+    assert calls["n"] == 1
+
+
+def test_poll_other_error_counts_cycle(monkeypatch):
+    before = vicare.metrics.SCRAPE_ERRORS.labels("cycle")._value.get()
+
+    def boom(dev):
+        raise Exception("connection reset")
+
+    monkeypatch.setattr(vicare.vicare_client, "poll", boom)
+    monkeypatch.setattr(vicare, "extract", lambda f: {"x": 1})
+    d = _driver_with_fakes(monkeypatch, _FakeBudget(allowed=True))
+    assert d.poll() is None
+    assert vicare.metrics.SCRAPE_ERRORS.labels("cycle")._value.get() == before + 1

@@ -56,3 +56,26 @@ def test_run_cycle_skips_on_none(monkeypatch):
                         lambda c, d: wrote.__setitem__("n", wrote["n"] + 1))
     main.run_cycle(_FakeDriver([None]), conn=object())
     assert wrote["n"] == 0
+
+
+def test_validate_env_passes_when_all_set(monkeypatch):
+    monkeypatch.setattr(main, "HEATPUMP_DRIVER", "vicare")
+    for v in ("DB_HOST", "DB_NAME", "DB_USER", "DB_PASS",
+              "VICARE_USER", "VICARE_PASS", "VICARE_CLIENT_ID"):
+        monkeypatch.setenv(v, "x")
+    main.validate_env()   # must not raise
+
+
+def test_pos_int_tolerates_bad_values(monkeypatch):
+    # Bad / zero / absurd values fall back to the default; a valid value is used as-is. A
+    # typo'd env must never crash the exporter at import or spin a sleep-0 loop.
+    monkeypatch.delenv("FOO", raising=False)
+    assert main._pos_int("FOO", 9125) == 9125          # missing -> default
+    monkeypatch.setenv("FOO", "not-a-number")
+    assert main._pos_int("FOO", 9125) == 9125          # non-numeric -> default
+    monkeypatch.setenv("FOO", "0")
+    assert main._pos_int("FOO", 9125) == 9125          # zero -> default
+    monkeypatch.setenv("FOO", "999999")
+    assert main._pos_int("FOO", 9125, hi=65535) == 9125  # absurd -> default
+    monkeypatch.setenv("FOO", "8080")
+    assert main._pos_int("FOO", 9125, hi=65535) == 8080  # valid -> value
