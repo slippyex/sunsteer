@@ -53,7 +53,7 @@ def read_inverter(host, port=502, unit_id=3, timeout=5.0):
             return None
 
         def regs(addr, count):
-            r = client.read_holding_registers(addr, count=count, slave=unit_id)
+            r = client.read_holding_registers(addr, count=count, device_id=unit_id)
             return None if r.isError() else r.registers
 
         def s32(addr):

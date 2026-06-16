@@ -5,6 +5,19 @@ import src.drivers.sma_modbus as mb
 from src.drivers.sma_modbus import parse_s32, parse_u32, parse_u64
 
 
+def test_read_holding_registers_kwargs_match_installed_pymodbus():
+    # Guard against the API drift that broke 0.3.2: pymodbus renamed the unit-id kwarg
+    # slave= -> device_id=. The hand-written fakes below can't catch an upstream change,
+    # so bind this to the REAL installed signature — a future breaking bump fails loudly here.
+    import inspect
+
+    from pymodbus.client import ModbusTcpClient
+    params = inspect.signature(ModbusTcpClient.read_holding_registers).parameters
+    assert "device_id" in params, "read_inverter passes device_id=; pymodbus no longer accepts it"
+    assert "count" in params
+    assert "slave" not in params, "pymodbus still has slave=; revisit the read_inverter call"
+
+
 def test_parse_s32_positive():
     assert parse_s32([0x0001, 0x86A0]) == 100000          # 0x000186A0 = 100000 W
 
@@ -50,7 +63,7 @@ class _FakeClient:
     def __init__(self, *a, **k): pass
     def connect(self): return True
     def close(self): pass
-    def read_holding_registers(self, addr, count=2, slave=3):
+    def read_holding_registers(self, addr, count=2, device_id=3):
         return _Resp(_REGMAP[addr])
 
 
@@ -74,7 +87,7 @@ def test_read_inverter_nan_total_yield_is_none_not_zero(monkeypatch):
     regmap[30513] = [0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF]   # U64 NaN sentinel (register read OK)
 
     class _FakeNanTotal(_FakeClient):
-        def read_holding_registers(self, addr, count=2, slave=3):
+        def read_holding_registers(self, addr, count=2, device_id=3):
             return _Resp(regmap[addr])
 
     monkeypatch.setitem(sys.modules, "pymodbus.client",
@@ -91,7 +104,7 @@ def test_read_inverter_logs_on_failure(monkeypatch, caplog):
     import logging
 
     class _Boom(_FakeClient):
-        def read_holding_registers(self, addr, count=2, slave=3):
+        def read_holding_registers(self, addr, count=2, device_id=3):
             raise RuntimeError("modbus exploded")
 
     monkeypatch.setitem(sys.modules, "pymodbus.client",
