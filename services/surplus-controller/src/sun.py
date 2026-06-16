@@ -3,6 +3,7 @@
 Used to gate the load-compensation: no real PV is possible when the sun is below the
 horizon, so the surplus calculation must not keep the heat pump running after dark."""
 import math
+from datetime import UTC, timedelta
 
 
 def sun_elevation(lat_deg: float, lon_deg: float, when_utc) -> float:
@@ -25,3 +26,21 @@ def sun_elevation(lat_deg: float, lon_deg: float, when_utc) -> float:
                   + math.cos(lat) * math.cos(decl) * math.cos(ha))
     cos_zenith = max(-1.0, min(1.0, cos_zenith))
     return 90.0 - math.degrees(math.acos(cos_zenith))
+
+
+def sun_window(lat_deg, lon_deg, day_start, min_elev_deg, step_min=5):
+    """The day's "PV window" — first and last time the sun is at/above `min_elev_deg`.
+
+    `day_start` is a tz-AWARE datetime at 00:00 local of the wanted day. Returns
+    `(rise, set)` tz-aware datetimes in the same tz, or `(None, None)` if the sun never
+    reaches the elevation that day (polar night / always below). Scans the local day in
+    `step_min` steps using `sun_elevation`, so it reuses the one validated formula instead
+    of inverting it — accurate to the step size, which is plenty for an HH:MM display."""
+    rise = sset = None
+    for m in range(0, 24 * 60 + 1, step_min):
+        t = day_start + timedelta(minutes=m)
+        if sun_elevation(lat_deg, lon_deg, t.astimezone(UTC)) >= min_elev_deg:
+            if rise is None:
+                rise = t
+            sset = t
+    return rise, sset

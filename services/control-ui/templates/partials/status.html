@@ -15,7 +15,8 @@
   {{ t('kpi_wp_power') }} <b class="a">{{ (L.wp_power|round|int) if L.wp_power is not none else '–' }} W</b><br>
   {{ t('relay') }} <b>{% if L.relay == 1 %}<span class="g">{{ t('on') }}</span>{% else %}<span class="a">{{ t('off') }}</span>{% endif %}</b><br>
   {{ t('self_consumption') }} <b class="c">{{ (L.self_consumption*100)|round|int if L.self_consumption is not none else '–' }} %</b><br>
-  {{ t('autarky') }} <b class="g">{{ (L.autarky*100)|round|int if L.autarky is not none else '–' }} %</b>
+  {{ t('autarky') }} <b class="g">{{ (L.autarky*100)|round|int if L.autarky is not none else '–' }} %</b><br>
+  {{ t('sun') }} <b class="{{ 'c' if L.sun_in_window else 'a' }}">☀ {{ (L.sun_elevation|round|int) if L.sun_elevation is not none else '–' }}°</b>{% if L.sun_rise %} <span class="txt-a">{{ t('pv_window') }} {{ L.sun_rise }}–{{ L.sun_set }}</span>{% endif %}
 </div>
 
 {# ── Health indicators ─────────────────────────────────────────────── #}

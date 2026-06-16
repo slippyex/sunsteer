@@ -13,7 +13,7 @@ from prometheus_client import start_http_server
 from . import config, dblog, metrics, relays, status_server
 from .forecast import fetch_all, fetch_gti, pv_estimate
 from .statemachine import decide
-from .sun import sun_elevation
+from .sun import sun_elevation, sun_window
 from .threshold import adaptive_threshold, available_surplus
 
 _log = logging.getLogger(__name__)
@@ -74,6 +74,22 @@ def _sun_min_elev():
 
 
 SUN_MIN_ELEVATION_DEG = _sun_min_elev()
+
+_sun_window_cache = {}   # local date -> (rise_ts, set_ts); today's PV window for the gauges
+
+
+def _todays_sun_window(now_local):
+    """(rise_ts, set_ts) unix timestamps of today's PV window (NaN if the sun never reaches
+    the threshold). Cached per local date — the window is static for the day."""
+    key = now_local.date()
+    if key not in _sun_window_cache:
+        _sun_window_cache.clear()
+        day_start = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+        rise, sset = sun_window(float(os.environ["PV_LAT"]), float(os.environ["PV_LON"]),
+                                day_start, SUN_MIN_ELEVATION_DEG)
+        _sun_window_cache[key] = (rise.timestamp() if rise else float("nan"),
+                                  sset.timestamp() if sset else float("nan"))
+    return _sun_window_cache[key]
 PV_TZ = os.environ.get("PV_TZ", "UTC")      # forecast.solar returns local timestamps
 # roof planes as JSON: [[declination, azimuth, kwp], ...]  (azimuth: 0=S, -90=E, +90=W)
 try:
@@ -358,6 +374,9 @@ def main():
                                state_fresh=state_fresh, state_age_s=age, available_w=avail)
                 if sun_elev is not None:
                     metrics.SUN_ELEVATION.set(sun_elev)
+                rise_ts, set_ts = _todays_sun_window(datetime.now(ZoneInfo(PV_TZ)))
+                metrics.SUN_RISE.set(rise_ts)
+                metrics.SUN_SET.set(set_ts)
                 status_reason = reason
                 if not sun_up and not relay_on and action not in ("switched_on", "switched_off"):
                     status_reason = "sun_below_horizon"

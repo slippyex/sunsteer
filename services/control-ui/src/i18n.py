@@ -37,6 +37,8 @@ S = {
     "threshold":        ("Schwelle", "Threshold"),
     "self_consumption": ("Eigenverbrauch", "Self-consumption"),
     "autarky":          ("Autarkie", "Self-sufficiency"),
+    "sun":              ("Sonne", "Sun"),
+    "pv_window":        ("PV-Fenster", "PV window"),
 
     # ── why card (rendered in explain.py) ──────────────────────────────────
     "why_unknown":        ("Status nicht verfügbar", "Status unavailable"),

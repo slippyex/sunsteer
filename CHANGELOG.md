@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [0.4.2] - 2026-06-16
+
+### Added
+- The web UI now shows the **sun**: the live solar elevation and today's **PV window**
+  (sunrise/sunset for `PV_SUN_MIN_ELEVATION_DEG`) in the status panel — cyan inside the
+  window, amber outside. Backed by two new gauges
+  `surplus_control_sun_rise_timestamp_seconds` / `surplus_control_sun_set_timestamp_seconds`
+  (NaN on a polar day/night).
+
 ## [0.4.1] - 2026-06-16
 
 A correctness fix to the surplus calculation, plus its observability. No breaking changes.
@@ -245,7 +254,8 @@ Initial public release.
 - Docker Compose stack, a zero-config demo (`docker-compose.demo.yml`), and multi-arch
   (`amd64` + `arm64`) images on GHCR.
 
-[Unreleased]: https://github.com/slippyex/sunsteer/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/slippyex/sunsteer/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/slippyex/sunsteer/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/slippyex/sunsteer/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/slippyex/sunsteer/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/slippyex/sunsteer/compare/v0.3.1...v0.3.2

@@ -18,6 +18,12 @@ AVAILABLE = Gauge("surplus_control_available_watts",
 SUN_ELEVATION = Gauge("surplus_control_sun_elevation_deg",
                       "Current solar elevation at the PV site (degrees). Below the configured "
                       "minimum the load-compensation is disabled so the WP is released after dark.")
+SUN_RISE = Gauge("surplus_control_sun_rise_timestamp_seconds",
+                 "Unix ts the sun reaches PV_SUN_MIN_ELEVATION_DEG today (start of the PV window); "
+                 "NaN on a polar day/night.")
+SUN_SET = Gauge("surplus_control_sun_set_timestamp_seconds",
+                "Unix ts the sun drops below PV_SUN_MIN_ELEVATION_DEG today (end of the PV window); "
+                "NaN on a polar day/night.")
 SWITCHES = Counter("surplus_control_switch_total", "Switch actions", ["action"])
 SHELLY_ERRORS = Counter("surplus_control_shelly_write_errors_total", "Failed Shelly writes")
 LOOP_ERRORS = Counter("surplus_control_loop_errors_total", "Loop exceptions caught (degraded, not fatal)", ["stage"])

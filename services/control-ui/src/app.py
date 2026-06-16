@@ -178,6 +178,9 @@ _LIVE = {
     "shm_last_ts": "sma_shm_last_telegram_timestamp_seconds",
     "shelly_reachable": "shelly_reachable", "inverter_reachable": "sma_inverter_reachable",
     "controller_up": 'up{job="surplus-controller"}',
+    "sun_elevation": "surplus_control_sun_elevation_deg",
+    "sun_rise_ts": "surplus_control_sun_rise_timestamp_seconds",
+    "sun_set_ts": "surplus_control_sun_set_timestamp_seconds",
 }
 
 
@@ -281,6 +284,11 @@ def _live():
         "wr": v.get("inverter_reachable") == 1,
         "controller": v.get("controller_up") == 1,
     }
+    # Sun / PV window: rise/set are unix ts (NaN -> None via prom parse) -> local HH:MM.
+    rts, sts = v.get("sun_rise_ts"), v.get("sun_set_ts")
+    v["sun_rise"] = datetime.fromtimestamp(rts, ZoneInfo(WTZ)).strftime("%H:%M") if rts else None
+    v["sun_set"] = datetime.fromtimestamp(sts, ZoneInfo(WTZ)).strftime("%H:%M") if sts else None
+    v["sun_in_window"] = bool(rts and sts and rts <= now <= sts)
     return v
 
 

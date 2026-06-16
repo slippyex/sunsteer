@@ -579,3 +579,25 @@ def test_ratio_guard_rejects_nonsensical_and_clamps():
     assert _ratio_pct_ok(0.85) == 0.85
     assert _ratio_pct_ok(1.02) == 1.0         # averaging overshoot clamps to 100%
     assert _ratio_pct_ok(-0.004) == 0.0
+
+
+def test_live_formats_sun_window(monkeypatch):
+    import time
+    now = time.time()
+    vals = {"surplus_control_sun_elevation_deg": 42.0,
+            "surplus_control_sun_rise_timestamp_seconds": now - 3600,   # rose an hour ago
+            "surplus_control_sun_set_timestamp_seconds": now + 3600}    # sets in an hour
+    monkeypatch.setattr(appmod.sources, "prom_query",
+                        lambda prom, expr, **k: next((v for key, v in vals.items() if key in expr), None))
+    v = appmod._live()
+    assert v["sun_elevation"] == 42.0
+    assert len(v["sun_rise"]) == 5 and ":" in v["sun_rise"]   # HH:MM
+    assert len(v["sun_set"]) == 5 and ":" in v["sun_set"]
+    assert v["sun_in_window"] is True            # now is between rise and set
+
+
+def test_live_sun_window_none_when_no_metric(monkeypatch):
+    monkeypatch.setattr(appmod.sources, "prom_query", lambda prom, expr, **k: None)
+    v = appmod._live()
+    assert v["sun_rise"] is None and v["sun_set"] is None
+    assert v["sun_in_window"] is False
