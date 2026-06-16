@@ -82,6 +82,18 @@ def test_today_summary_survives_a_counter_reset():
     assert abs(prod - 6.0) < 0.01            # real production, not the ~14 lifetime span
 
 
+def test_heatpump_telemetry_table_exists_and_vicare_is_gone():
+    # The generic contract table replaces the vendor-named one; data is preserved by a RENAME.
+    c = _conn()
+    with c.cursor() as cur:
+        cur.execute("SELECT to_regclass('public.heatpump_telemetry'), "
+                    "to_regclass('public.heatpump_vicare')")
+        new, old = cur.fetchone()
+    c.close()
+    assert new is not None        # heatpump_telemetry exists
+    assert old is None            # heatpump_vicare no longer exists
+
+
 def test_daily_production_survives_a_midday_counter_reset():
     # production_kwh_total is a monotonic lifetime counter. If the inverter resets it mid-day,
     # max(total)-min(total) reports a wildly wrong figure (the whole lifetime span). The real

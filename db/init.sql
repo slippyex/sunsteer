@@ -32,10 +32,8 @@ CREATE TABLE IF NOT EXISTS heatpump (
 );
 SELECT create_hypertable('heatpump', 'time', if_not_exists => TRUE);
 
--- ViCare cloud telemetry (read-only). The writer names columns explicitly, so DDL order is
--- irrelevant; what matters is that these column NAMES match extract.FIELDS in vicare-exporter
--- (enforced by tests/integration/test_config_consistency.py).
-CREATE TABLE IF NOT EXISTS heatpump_vicare (
+-- Heat-pump telemetry (read-only). Column NAMES must match the generic contract (HEATPUMP_FIELDS in heatpump-exporter), enforced by tests/integration/test_config_consistency.py.
+CREATE TABLE IF NOT EXISTS heatpump_telemetry (
   time                   TIMESTAMPTZ NOT NULL,
   dhw_temp_c             DOUBLE PRECISION,
   dhw_target_c           DOUBLE PRECISION,
@@ -57,8 +55,8 @@ CREATE TABLE IF NOT EXISTS heatpump_vicare (
   compressor_starts      DOUBLE PRECISION,
   compressor_hours       DOUBLE PRECISION
 );
-SELECT create_hypertable('heatpump_vicare', 'time', if_not_exists => TRUE);
-SELECT add_retention_policy('heatpump_vicare', INTERVAL '365 days', if_not_exists => TRUE);
+SELECT create_hypertable('heatpump_telemetry', 'time', if_not_exists => TRUE);
+SELECT add_retention_policy('heatpump_telemetry', INTERVAL '365 days', if_not_exists => TRUE);
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS energy_daily
 WITH (timescaledb.continuous) AS
