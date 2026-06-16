@@ -567,3 +567,15 @@ def test_heatpump_label_shown_as_tag(monkeypatch):
     monkeypatch.setattr(appmod.sources, "prom_query", lambda *a, **k: 1.0)
     r = TestClient(appmod.app).get("/partials/heatpump")
     assert "Vitocal 250 A06" in r.text
+
+
+def test_ratio_guard_rejects_nonsensical_and_clamps():
+    # Eigenverbrauch/Autarkie are ratios in [0,1]. When the inverter is in error (production≈0)
+    # the recording rule divides by ~0 and returns absurd values (the -66750% bug). Treat
+    # anything outside a small tolerance as undefined (-> dash); clamp tiny overshoots.
+    from src.app import _ratio_pct_ok
+    assert _ratio_pct_ok(-667.5) is None      # the -66750% case
+    assert _ratio_pct_ok(None) is None
+    assert _ratio_pct_ok(0.85) == 0.85
+    assert _ratio_pct_ok(1.02) == 1.0         # averaging overshoot clamps to 100%
+    assert _ratio_pct_ok(-0.004) == 0.0
