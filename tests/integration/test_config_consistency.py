@@ -108,14 +108,15 @@ def test_ui_cols_are_defaults_minus_controller_only():
     )
 
 
-# vicare: the heatpump_telemetry writer names columns from extract._FIELDS, so the field NAMES
-# (not order) must match the DDL. Guard it like the control_config columns above.
-def test_vicare_fields_match_heatpump_telemetry_ddl():
-    fields = _dict_keys(
-        os.path.join(ROOT, "services", "heatpump-exporter", "src", "extract.py"), "_FIELDS")
+# The heatpump-exporter writer names columns from the shell-owned contract HEATPUMP_FIELDS, so
+# the field NAMES (not order) must match the heatpump_telemetry DDL. Guard it like control_config.
+def test_heatpump_fields_match_telemetry_ddl():
+    fields = set(_literal_assign(
+        os.path.join(ROOT, "services", "heatpump-exporter", "src", "contract.py"),
+        "HEATPUMP_FIELDS"))
     ddl = _ddl_columns_for("heatpump_telemetry") - {"time"}   # time is stamped by now()
     assert fields == ddl, (
-        "vicare extract._FIELDS must match the heatpump_telemetry DDL column names; diff: "
+        "HEATPUMP_FIELDS must match the heatpump_telemetry DDL column names; diff: "
         f"missing_in_ddl={fields - ddl}, extra_in_ddl={ddl - fields}")
 
 
