@@ -152,8 +152,11 @@ def test_harvest_summary_self_and_wasted():
     # self-consumed ~ 2000 W × 10 min = 0.333 kWh; wasted ~ 1500 W × 10 min = 0.25 kWh
     assert 0.28 < h["self_kwh"] < 0.38
     assert 0.20 < h["wasted_kwh"] < 0.30
-    assert round(h["self_eur"], 4) == round(h["self_kwh"] * (0.30 - 0.08), 4)
-    assert round(h["wasted_eur"], 4) == round(h["wasted_kwh"] * (0.30 - 0.08), 4)
+    # € = kWh × (grid − feed). Each field is independently rounded to 2 decimals, so compare
+    # within a sub-cent tolerance rather than for exact equality (rounding-order would otherwise
+    # make the 2-decimal € differ from the full-precision product).
+    assert abs(h["self_eur"] - h["self_kwh"] * (0.30 - 0.08)) < 0.01
+    assert abs(h["wasted_eur"] - h["wasted_kwh"] * (0.30 - 0.08)) < 0.01
 
 
 def test_harvest_summary_tolerant_on_bad_conn():
