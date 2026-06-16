@@ -27,6 +27,6 @@ updates:
     commit-message: { prefix: "deps(control-ui)" }
 
   - package-ecosystem: pip
-    directory: /services/vicare-exporter
+    directory: /services/heatpump-exporter
     schedule: { interval: weekly }
-    commit-message: { prefix: "deps(vicare-exporter)" }
+    commit-message: { prefix: "deps(heatpump-exporter)" }

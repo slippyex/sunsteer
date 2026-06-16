@@ -35,7 +35,7 @@ body:
         - energy-exporter
         - surplus-controller
         - control-ui
-        - vicare-exporter
+        - heatpump-exporter
         - deploy / compose / k8s
         - not sure
     validations:

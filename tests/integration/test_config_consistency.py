@@ -112,7 +112,7 @@ def test_ui_cols_are_defaults_minus_controller_only():
 # (not order) must match the DDL. Guard it like the control_config columns above.
 def test_vicare_fields_match_heatpump_telemetry_ddl():
     fields = _dict_keys(
-        os.path.join(ROOT, "services", "vicare-exporter", "src", "extract.py"), "_FIELDS")
+        os.path.join(ROOT, "services", "heatpump-exporter", "src", "extract.py"), "_FIELDS")
     ddl = _ddl_columns_for("heatpump_telemetry") - {"time"}   # time is stamped by now()
     assert fields == ddl, (
         "vicare extract._FIELDS must match the heatpump_telemetry DDL column names; diff: "
@@ -125,7 +125,7 @@ def test_vicare_fields_match_heatpump_telemetry_ddl():
 _DB_MODULES = [
     ("surplus-controller", "dblog.py"),
     ("energy-exporter", "tsdb_writer.py"),
-    ("vicare-exporter", "tsdb_writer.py"),
+    ("heatpump-exporter", "tsdb_writer.py"),
 ]
 
 

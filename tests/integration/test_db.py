@@ -96,7 +96,7 @@ def test_heatpump_telemetry_table_exists_and_vicare_is_gone():
 
 def test_heatpump_writer_against_real_schema():
     _drop_src_modules()
-    sys.path.insert(0, os.path.join(ROOT, "services", "vicare-exporter"))
+    sys.path.insert(0, os.path.join(ROOT, "services", "heatpump-exporter"))
     from src import tsdb_writer as w  # type: ignore
     c = _conn()
     w.write(c, {"dhw_temp_c": 51.0, "compressor_starts": 5})
