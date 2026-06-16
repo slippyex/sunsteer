@@ -82,7 +82,8 @@ Settings changes apply on the next control cycle (≤ 15 s) — no restarts.
 ```bash
 # Prometheus + Grafana (+ English alert rules):
 docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
-# Viessmann ViCare telemetry (set VICARE_* in .env first):
+# Heat-pump telemetry via the vicare driver (set VICARE_* credentials in .env first;
+# also set HEATPUMP_DRIVER=vicare and optionally HEATPUMP_LABEL in .env):
 docker compose --profile vicare up -d
 ```
 

@@ -49,18 +49,25 @@ nice-to-have telemetry for the UI and Grafana, not used by the control loop.
   but are unverified.
 - Leave `INVERTER_HOST` empty to disable entirely.
 
-## Viessmann ViCare (optional)
+## Heat-pump telemetry — `vicare` driver
 
-Heat-pump internals (temperatures, compressor speed/starts, energy counters) via the
-ViCare cloud API. Tested with a **Vitocal 250-A**.
+The `heatpump-exporter` service provides optional heat-pump telemetry (temperatures,
+compressor speed/starts, energy counters). Select the driver with `HEATPUMP_DRIVER`
+(default `vicare`). The `mock` driver produces synthetic telemetry for the demo — no
+credentials or vendor hardware required.
 
-- Know the quirks: the API provides **no instantaneous power** (only cumulative,
-  estimated kWh counters), and those counters lag — **thermal posts before
-  electrical, sometimes days**. Sunsteer's UI labels affected figures accordingly
-  (e.g. COP shown as "–" until both sides reported).
+**`vicare` driver** — Viessmann ViCare cloud API quirks (driver-specific):
+
+- The API provides **no instantaneous power** (only cumulative, estimated kWh counters),
+  and those counters lag — **thermal posts before electrical, sometimes days**. Sunsteer's
+  UI labels affected figures accordingly (e.g. COP shown as "–" until both sides reported).
 - Polling is rate-budgeted (`VICARE_DAILY_CAP`) to stay inside Viessmann's API limits.
-- Strictly informative: the control loop never depends on ViCare. Skip it entirely if
-  you don't run a Viessmann pump — surplus control works the same.
+- Strictly informative: the control loop never depends on it. Set `HEATPUMP_DRIVER=mock`
+  (or omit the service entirely) if you don't use the ViCare API — surplus control works
+  the same.
+
+For the full contract (DB table, Prometheus metrics, "bring your own driver"):
+[docs/heatpump-interface.md](heatpump-interface.md).
 
 ## The heat pump itself
 

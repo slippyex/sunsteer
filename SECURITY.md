@@ -26,7 +26,7 @@ Report privately through one of:
 Please include:
 
 - the affected service(s) (`energy-exporter`, `surplus-controller`, `control-ui`,
-  `vicare-exporter`) and version / image tag,
+  `heatpump-exporter`) and version / image tag,
 - how it's deployed (Docker Compose, Kubernetes, demo),
 - a description, impact, and reproduction steps (a proof of concept helps),
 - any relevant logs or configuration (with secrets redacted).

@@ -24,7 +24,7 @@ flowchart LR
   CTRL -->|decision_log| TSDB
   TSDB --> UI[control-ui]
   CTRL -->|/status| UI
-  VICARE[vicare-exporter<br/>optional] --> TSDB
+  HPEXP[heatpump-exporter<br/>optional, HEATPUMP_DRIVER] --> TSDB
 ```
 
 ## Components
@@ -81,11 +81,14 @@ reason, history charts cover temperatures, runs, compressor, savings. Runtime tu
 no restarts. It reads the controller's live decision state from the versioned
 [`/status` contract](status-interface.md).
 
-### vicare-exporter — optional telemetry
+### heatpump-exporter — optional telemetry
 
-Polls the Viessmann ViCare cloud API for heat-pump internals (temperatures, compressor
-speed/starts, energy counters) into TimescaleDB. Informative only — the control loop
-never depends on it. Mind its [data quirks](hardware.md#viessmann-vicare-optional).
+Polls a selectable driver (`HEATPUMP_DRIVER`) for heat-pump internals (temperatures, compressor
+speed/starts, energy counters) and writes them to the `heatpump_telemetry` TimescaleDB table.
+Informative only — the control loop never depends on it. The built-in drivers are `vicare`
+(Viessmann ViCare cloud API — mind its [data quirks](hardware.md#heat-pump-telemetry-vicare-driver))
+and `mock` (synthetic telemetry for the demo). See [docs/heatpump-interface.md](heatpump-interface.md)
+for the full contract and "bring your own driver" instructions.
 
 ## The fail-safe chain
 
@@ -111,7 +114,7 @@ SG-Ready is an input to the pump's controller, not a motor switch.
 | `heatpump` | energy-exporter | Relay state + power per poll (~1 min cadence) |
 | `decision_log` | surplus-controller | Every decision: mode, surplus, threshold, action, reason, audit fields |
 | `control_config` | control-ui (writes), controller (reads each cycle) | Runtime tuning key/values |
-| `heatpump_vicare` | vicare-exporter | Optional heat-pump telemetry |
+| `heatpump_telemetry` | heatpump-exporter | Optional heat-pump telemetry (driver-agnostic; see [heatpump-interface.md](heatpump-interface.md)) |
 
 Fresh installs get the full schema from `db/init.sql`; upgrades apply numbered,
 idempotent scripts from `db/migrations/` (the compose stack does this automatically on

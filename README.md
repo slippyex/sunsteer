@@ -90,7 +90,7 @@ Released images (multi-arch, `linux/amd64` + `linux/arm64` — Raspberry Pi work
 | `ghcr.io/slippyex/sunsteer/energy-exporter` | Meter readings (Speedwire multicast or mock), relay state, optional inverter telemetry; serves `/state` + `/metrics`; writes TimescaleDB |
 | `ghcr.io/slippyex/sunsteer/surplus-controller` | The control loop: adaptive threshold → hysteresis → switch the relay; fail-safe OFF on stale data |
 | `ghcr.io/slippyex/sunsteer/control-ui` | Web UI (EN/DE): live status, decision log with explanations, history charts, settings |
-| `ghcr.io/slippyex/sunsteer/vicare-exporter` | Optional: Viessmann ViCare telemetry (temperatures, compressor, energy counters) |
+| `ghcr.io/slippyex/sunsteer/heatpump-exporter` | Optional: generic heat-pump telemetry (temperatures, compressor, energy counters); `HEATPUMP_DRIVER=vicare` for Viessmann ViCare, `mock` for the demo — see [docs/heatpump-interface.md](docs/heatpump-interface.md) |
 
 ## Architecture
 
@@ -113,7 +113,7 @@ flowchart LR
   CTRL --> TSDB
   TSDB --> UI[control-ui]
   CTRL -->|/status| UI
-  VICARE[vicare-exporter<br/>optional] --> TSDB
+  HPEXP[heatpump-exporter<br/>optional, HEATPUMP_DRIVER] --> TSDB
 ```
 
 Details, data flow and the fail-safe chain: [docs/architecture.md](docs/architecture.md)
