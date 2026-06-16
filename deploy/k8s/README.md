@@ -14,7 +14,7 @@ install runs on K3s).
 | `energy-exporter.yaml` | Meter/relay reader — `hostNetwork: true` for Speedwire multicast |
 | `surplus-controller.yaml` | The control loop |
 | `control-ui.yaml` | Web UI |
-| `vicare-exporter.yaml` | Optional ViCare telemetry — OFF by default; uncomment it in `kustomization.yaml` (and fill the VICARE_* secret keys) to enable |
+| `heatpump-exporter.yaml` | Optional heat-pump telemetry — OFF by default; uncomment it in `kustomization.yaml` (and fill the VICARE_* secret keys for the `vicare` driver) to enable |
 | `secret.example.yaml` | Secret template — copy to `secret.yaml` and fill in |
 | `kustomization.yaml` | Ties it together |
 

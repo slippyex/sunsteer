@@ -115,5 +115,21 @@ services:
       resources:
         limits: { cpus: "0.5", memory: 256M }
 
+  heatpump-exporter:
+    image: ghcr.io/slippyex/sunsteer/heatpump-exporter:${SUNSTEER_VERSION:-0.3.2}
+    build: ../../services/heatpump-exporter
+    environment:
+      HEATPUMP_DRIVER: mock
+      DB_HOST: timescaledb
+      DB_NAME: energy
+      DB_USER: sunsteer
+      DB_PASS: sunsteer
+    depends_on:
+      timescaledb: { condition: service_healthy }
+      db-migrate: { condition: service_completed_successfully }
+    security_opt: [ "no-new-privileges:true" ]
+    cap_drop: [ "ALL" ]
+    deploy: { resources: { limits: { memory: 128M } } }
+
 volumes:
   demo-pgdata:

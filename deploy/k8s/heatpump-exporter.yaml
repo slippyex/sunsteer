@@ -1,10 +1,12 @@
-# vicare-exporter — OPTIONAL Viessmann ViCare telemetry (temperatures, compressor,
-# energy counters). Not using ViCare? Delete this file and drop it from
-# kustomization.yaml (the VICARE_* secret keys then become unused).
+# heatpump-exporter — OPTIONAL heat-pump telemetry (temperatures, compressor,
+# energy counters). Set HEATPUMP_DRIVER=vicare for Viessmann ViCare integration;
+# the mock driver needs no creds and is used in the zero-config demo.
+# Not using a heat pump? Delete this file and drop it from kustomization.yaml
+# (the VICARE_* secret keys then become unused).
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: vicare-exporter
+  name: heatpump-exporter
   namespace: sunsteer
 spec:
   replicas: 1
@@ -12,11 +14,11 @@ spec:
     type: Recreate          # single RWO PVC writer (token + budget cache)
   selector:
     matchLabels:
-      app: vicare-exporter
+      app: heatpump-exporter
   template:
     metadata:
       labels:
-        app: vicare-exporter
+        app: heatpump-exporter
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "9125"
@@ -27,11 +29,12 @@ spec:
         fsGroup: 10001        # so the non-root user can write the /data PVC
         seccompProfile: { type: RuntimeDefault }
       containers:
-        - name: vicare-exporter
-          image: ghcr.io/slippyex/sunsteer/vicare-exporter:0.3.2  # pinned; kustomize images: bumps it too
+        - name: heatpump-exporter
+          image: ghcr.io/slippyex/sunsteer/heatpump-exporter:0.3.2  # pinned; kustomize images: bumps it too
           imagePullPolicy: IfNotPresent
           env:
             - { name: PYTHONDONTWRITEBYTECODE, value: "1" }   # readOnlyRootFilesystem
+            - { name: HEATPUMP_DRIVER, value: "vicare" }
             - { name: METRICS_PORT, value: "9125" }
             - { name: VICARE_POLL_SECONDS, value: "300" }
             - { name: VICARE_DAILY_CAP, value: "1400" }
@@ -90,11 +93,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: vicare-exporter
+  name: heatpump-exporter
   namespace: sunsteer
 spec:
   selector:
-    app: vicare-exporter
+    app: heatpump-exporter
   ports:
     - { name: metrics, port: 9125, targetPort: 9125 }
 ---

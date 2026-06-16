@@ -163,11 +163,12 @@ services:
         limits: { cpus: "0.5", memory: 256M }
     restart: unless-stopped
 
-  vicare-exporter:
-    image: ghcr.io/slippyex/sunsteer/vicare-exporter:${SUNSTEER_VERSION:-0.3.2}
-    build: ../../services/vicare-exporter
+  heatpump-exporter:
+    image: ghcr.io/slippyex/sunsteer/heatpump-exporter:${SUNSTEER_VERSION:-0.3.2}
+    build: ../../services/heatpump-exporter
     profiles: ["vicare"]
     environment:
+      HEATPUMP_DRIVER: vicare
       VICARE_USER: ${VICARE_USER:-}
       VICARE_PASS: ${VICARE_PASS:-}
       VICARE_CLIENT_ID: ${VICARE_CLIENT_ID:-}

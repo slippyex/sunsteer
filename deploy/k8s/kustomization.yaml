@@ -14,9 +14,10 @@ resources:
   - energy-exporter.yaml
   - surplus-controller.yaml
   - control-ui.yaml
-  # Optional ViCare telemetry — UNCOMMENT to enable (and fill the VICARE_* secret keys).
-  # Left off by default: with placeholder creds it would just loop on auth failures.
-  # - vicare-exporter.yaml
+  # Optional heat-pump telemetry — UNCOMMENT to enable (and fill the VICARE_* secret keys
+  # when using HEATPUMP_DRIVER=vicare). Left off by default: with placeholder creds it
+  # would just loop on auth failures.
+  # - heatpump-exporter.yaml
   # Optional NetworkPolicy (restrict ingress to the namespace). UNCOMMENT to enable —
   # needs a NetworkPolicy-enforcing CNI; does not cover the hostNetwork energy-exporter.
   # - networkpolicy.yaml
@@ -34,7 +35,7 @@ images:
     newTag: "0.3.2"
   - name: ghcr.io/slippyex/sunsteer/control-ui
     newTag: "0.3.2"
-  - name: ghcr.io/slippyex/sunsteer/vicare-exporter
+  - name: ghcr.io/slippyex/sunsteer/heatpump-exporter
     newTag: "0.3.2"
 
 # NOTE: the db-migrate Job mounts a `sunsteer-migrations` ConfigMap built from
