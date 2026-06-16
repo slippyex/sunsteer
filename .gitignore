@@ -10,4 +10,5 @@ deploy/k8s/secret.yaml
 .DS_Store
 *.egg-info/
 .superpowers/
+docs/superpowers/
 tasks/
