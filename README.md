@@ -42,7 +42,9 @@ docker compose -f docker-compose.demo.yml up -d
 
 Open **http://localhost:8080** (login `admin` / `sunsteer`). A synthetic PV "day"
 passes every 10 minutes; switch the mode to **auto** in the settings to watch the
-controller decide in real time. Tear down with `docker compose -f docker-compose.demo.yml down -v`.
+controller decide in real time. The heat-pump telemetry card is populated too — the demo
+runs the `heatpump-exporter` with its `mock` driver (`HEATPUMP_DRIVER=mock`), so no vendor
+account is needed. Tear down with `docker compose -f docker-compose.demo.yml down -v`.
 
 ## Features
 
