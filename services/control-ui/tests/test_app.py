@@ -140,18 +140,18 @@ def test_balance_partial_renders(monkeypatch):
     assert "2.8" in r.text and "10.0" in r.text
 
 
-def test_vicare_partial_renders(monkeypatch):
+def test_heatpump_partial_renders(monkeypatch):
     _patch(monkeypatch)
     monkeypatch.setattr(appmod.sources, "prom_query", lambda *a, **k: 42.0)
-    r = TestClient(appmod.app).get("/partials/vicare?lang=de")
+    r = TestClient(appmod.app).get("/partials/heatpump?lang=de")
     assert r.status_code == 200
     assert "SCOP" in r.text and "Verdichter" in r.text
 
 
-def test_vicare_partial_tolerates_missing_metrics(monkeypatch):
+def test_heatpump_partial_tolerates_missing_metrics(monkeypatch):
     _patch(monkeypatch)
     monkeypatch.setattr(appmod.sources, "prom_query", lambda *a, **k: None)
-    r = TestClient(appmod.app).get("/partials/vicare")
+    r = TestClient(appmod.app).get("/partials/heatpump")
     assert r.status_code == 200  # all None -> dashes, no 500
 
 
@@ -550,3 +550,20 @@ def test_balance_survives_null_config_prices(monkeypatch):
     monkeypatch.setattr(appmod.sources, "solar_forecast_today", lambda c: {})
     r = TestClient(appmod.app).get("/partials/balance")
     assert r.status_code == 200
+
+
+def test_heatpump_label_empty_hides_tag(monkeypatch):
+    _patch(monkeypatch)
+    monkeypatch.setattr(appmod, "HEATPUMP_LABEL", "")
+    monkeypatch.setattr(appmod.sources, "prom_query", lambda *a, **k: 1.0)
+    r = TestClient(appmod.app).get("/partials/heatpump")
+    assert r.status_code == 200
+    assert "VICARE" not in r.text          # no vendor tag when unset
+
+
+def test_heatpump_label_shown_as_tag(monkeypatch):
+    _patch(monkeypatch)
+    monkeypatch.setattr(appmod, "HEATPUMP_LABEL", "Vitocal 250 A06")
+    monkeypatch.setattr(appmod.sources, "prom_query", lambda *a, **k: 1.0)
+    r = TestClient(appmod.app).get("/partials/heatpump")
+    assert "Vitocal 250 A06" in r.text

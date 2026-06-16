@@ -33,6 +33,7 @@ def _pos_int(name, default, hi=65535):
 PROM = os.environ.get("PROMETHEUS_URL", "http://prometheus:9090")
 GRAFANA = os.environ.get("GRAFANA_URL", "")        # empty -> Grafana link hidden in the UI
 WEATHER_LOCATION = os.environ.get("WEATHER_LOCATION", "")  # empty -> weather panel shows just "Weather"
+HEATPUMP_LABEL = os.environ.get("HEATPUMP_LABEL", "").strip()  # empty -> vendor tag hidden in heat-pump card
 
 # Open-Meteo weather widget — reuse the PV array location
 WLAT = os.environ.get("PV_LAT")                    # required — validated below
@@ -180,19 +181,19 @@ _LIVE = {
 }
 
 
-# ViCare heat-pump telemetry (vicare-exporter -> Prometheus). Slow-changing -> polled 60s.
-_VICARE = {
-    "dhw_temp": "vicare_dhw_temp_c", "dhw_target": "vicare_dhw_target_c",
-    "buffer_temp": "vicare_buffer_temp_c", "outside_temp": "vicare_outside_temp_c",
-    "supply_temp": "vicare_supply_temp_c",
-    "scop": "vicare_scop_total", "spf": "vicare_spf_total",
-    "comp_speed": "vicare_compressor_speed_rps", "comp_starts": "vicare_compressor_starts",
-    "comp_hours": "vicare_compressor_hours",
-    "e_total": "vicare_energy_total_kwh", "e_heating": "vicare_energy_heating_kwh",
-    "e_dhw": "vicare_energy_dhw_kwh",
-    "th_heating": "vicare_heat_heating_kwh", "th_dhw": "vicare_heat_dhw_kwh",
-    "hr_heating": "vicare_heatingrod_heating_kwh", "hr_dhw": "vicare_heatingrod_dhw_kwh",
-    "energy_read_at": "vicare_energy_read_at_timestamp_seconds",
+# Heat-pump telemetry (heatpump-exporter -> Prometheus). Slow-changing -> polled 60s.
+_HEATPUMP = {
+    "dhw_temp": "heatpump_dhw_temp_c", "dhw_target": "heatpump_dhw_target_c",
+    "buffer_temp": "heatpump_buffer_temp_c", "outside_temp": "heatpump_outside_temp_c",
+    "supply_temp": "heatpump_supply_temp_c",
+    "scop": "heatpump_scop_total", "spf": "heatpump_spf_total",
+    "comp_speed": "heatpump_compressor_speed_rps", "comp_starts": "heatpump_compressor_starts",
+    "comp_hours": "heatpump_compressor_hours",
+    "e_total": "heatpump_energy_total_kwh", "e_heating": "heatpump_energy_heating_kwh",
+    "e_dhw": "heatpump_energy_dhw_kwh",
+    "th_heating": "heatpump_heat_heating_kwh", "th_dhw": "heatpump_heat_dhw_kwh",
+    "hr_heating": "heatpump_heatingrod_heating_kwh", "hr_dhw": "heatpump_heatingrod_dhw_kwh",
+    "energy_read_at": "heatpump_energy_read_at_timestamp_seconds",
 }
 
 # Inverter (SMA Tripower X via Modbus). string a/b = the two MPPT inputs (the East/West arrays).
@@ -391,21 +392,21 @@ def balance(request: Request):
     return render(request, "partials/balance.html", b=sm)
 
 
-@app.get("/partials/vicare", response_class=HTMLResponse)
-def vicare(request: Request):
-    v = {k: sources.prom_query(PROM, e) for k, e in _VICARE.items()}
+@app.get("/partials/heatpump", response_class=HTMLResponse)
+def heatpump(request: Request):
+    v = {k: sources.prom_query(PROM, e) for k, e in _HEATPUMP.items()}
     ra = v.get("energy_read_at")
     try:
         v["energy_read_at_str"] = (datetime.fromtimestamp(ra, ZoneInfo(WTZ)).strftime("%d.%m. %H:%M")
                                    if ra else None)
     except (ValueError, OSError, OverflowError):
         v["energy_read_at_str"] = None
-    # Daily energy view: real COP only when both sides are reported. ViCare lags the
-    # electrical day-counter behind the thermal one, so guard the impossible 0-in/N-out pair.
+    # Daily energy view: real COP only when both sides are reported. The heat-pump exporter lags
+    # the electrical day-counter behind the thermal one, so guard the impossible 0-in/N-out pair.
     v.update(explain.energy_today(v.get("e_total"), v.get("th_heating"), v.get("th_dhw")))
     # backup heating rod (Heizstab) — running it is expensive/inefficient, surface it
     v["heatingrod_today"] = round((v.get("hr_heating") or 0) + (v.get("hr_dhw") or 0), 1)
-    return render(request, "partials/vicare.html", v=v)
+    return render(request, "partials/heatpump.html", v=v, label=HEATPUMP_LABEL)
 
 
 @app.get("/partials/inverter", response_class=HTMLResponse)

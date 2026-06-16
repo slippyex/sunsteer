@@ -5,7 +5,7 @@
 
 {# ── Panel 1: WÄRMEPUMPE — temperatures ──────────────────────────── #}
 <div class="panel">
-  <h2>{{ t('sec_vicare') }} <span class="tag">VICARE</span></h2>
+  <h2>{{ t('sec_heatpump') }} {% if label %}<span class="tag">{{ label }}</span>{% endif %}</h2>
   <div class="pbody">
     <div class="num">
       {%- if v.dhw_temp is not none -%}{{ v.dhw_temp|round(1) }}<small> °C</small>{%- else -%}&ndash;{%- endif -%}

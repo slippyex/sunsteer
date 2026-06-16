@@ -80,21 +80,21 @@ S = {
     "total_lc":         ("gesamt", "total"),
     "wp_runtime_today": ("WP-Laufzeit heute", "HP runtime today"),
 
-    # ── vicare card ────────────────────────────────────────────────────────
+    # ── heat-pump card ─────────────────────────────────────────────────────
     "dhw_tank":     ("WW-Speicher", "DHW tank"),
     "buffer":       ("Puffer", "Buffer"),
     "outside":      ("Außen", "Outside"),
     "supply":       ("Vorlauf", "Flow"),
-    "scop_tip":     ("Saisonale Effizienz-Kennzahlen von Viessmann (langsam, ~täglich aktualisiert). Auf der Vitocal 250-A liefern SCOP und SPF dieselbe Quelle.",
-                     "Seasonal efficiency figures from Viessmann (slow, ~daily). On the Vitocal 250-A, SCOP and SPF share one source."),
+    "scop_tip":     ("Saisonale Effizienz-Kennzahlen der Wärmepumpe (langsam, ~täglich aktualisiert). SCOP und SPF stammen aus derselben Quelle.",
+                     "Seasonal efficiency figures from the heat pump (slow, ~daily). SCOP and SPF share one source."),
     "rod_warn":     ("Heizstab lief heute: {kwh} kWh — teurer Direktstrom statt Wärmepumpe.",
                      "Backup heater ran today: {kwh} kWh — expensive resistive heating instead of the heat pump."),
     "compressor":   ("Verdichter", "Compressor"),
     "starts":       ("Starts", "Starts"),
     "runtime":      ("Laufzeit", "Runtime"),
     "thermal":      ("therm.", "thermal"),
-    "el_pending_tip": ("Viessmann meldet den elektrischen Tagesverbrauch verzögert nach der erzeugten Wärme. Sobald er da ist, erscheinen el. kWh und COP.",
-                       "Viessmann reports the day's electrical consumption later than the heat produced. Once it arrives, elec. kWh and COP appear."),
+    "el_pending_tip": ("Die Wärmepumpe meldet den elektrischen Tagesverbrauch verzögert nach der erzeugten Wärme. Sobald er da ist, erscheinen el. kWh und COP.",
+                       "The heat pump reports the day's electrical consumption later than the heat produced. Once it arrives, elec. kWh and COP appear."),
 
     # ── inverter card ──────────────────────────────────────────────────────
     "ac_power":        ("AC-Leistung", "AC power"),
@@ -156,7 +156,7 @@ S = {
     "wmo_99": ("Schweres Gewitter", "Severe thunderstorm"),
 
     # ── index sections / history ───────────────────────────────────────────
-    "sec_vicare":       ("Wärmepumpe · ViCare", "Heat pump · ViCare"),
+    "sec_heatpump":     ("Wärmepumpe", "Heat pump"),
     "sec_inverter":     ("Wechselrichter · SMA", "Inverter · SMA"),
     "sec_eff":          ("Wirksamkeit", "Effectiveness"),
     "sec_history":      ("WP-Historie", "HP history"),
@@ -170,7 +170,7 @@ S = {
     "hist_run":         ("WP-Lauf vs. Überschuss", "HP run vs. surplus"),
     "hist_comp":        ("Verdichter (rps · Starts)", "Compressor (rps · starts)"),
     "hist_eff":         ("Effizienz", "Efficiency"),
-    "hist_eff_note":    ("· geschätzt, ViCare-Lag ~1–2 T", "· estimated, ViCare lag ~1–2 d"),
+    "hist_eff_note":    ("· geschätzt, Wärmepumpen-Lag ~1–2 T", "· estimated, heat-pump telemetry lag ~1–2 d"),
     "hist_strings":     ("WR: Ost vs. West (DC-Leistung)", "Inverter: east vs. west (DC power)"),
     "hist_strings_note":("· String A / B", "· string A / B"),
 

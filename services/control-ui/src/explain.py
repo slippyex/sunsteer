@@ -14,7 +14,7 @@ def _min_left(total_s, elapsed_s):
 
 
 def energy_today(e_total, th_heating, th_dhw):
-    """ViCare daily energy view. Viessmann's cloud posts the THERMAL day-counter before the
+    """Heat-pump daily energy view. The telemetry posts the THERMAL day-counter before the
     ELECTRICAL one, so a period can show thermal > 0 while electrical is still 0 (lagging) —
     which would render an impossible 0 kWh-in / N kWh-out pair (and an infinite COP).
     Flag that case (`el_pending`) instead, and only compute COP once both sides are real.

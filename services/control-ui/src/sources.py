@@ -233,14 +233,14 @@ _WP_WINDOWS = {
 
 
 def _wp_temps(conn, interval, bucket):
-    """Temperatures (WW/buffer/supply/outside), bucket-averaged. Reliable ViCare telemetry."""
+    """Temperatures (WW/buffer/supply/outside), bucket-averaged. From heat-pump telemetry."""
     try:
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT time_bucket(%s::interval, time) AS t, "
                 "round(avg(dhw_temp_c)::numeric,1), round(avg(buffer_temp_c)::numeric,1), "
                 "round(avg(supply_temp_c)::numeric,1), round(avg(outside_temp_c)::numeric,1) "
-                "FROM heatpump_vicare WHERE time > now() - %s::interval "
+                "FROM heatpump_telemetry WHERE time > now() - %s::interval "
                 "GROUP BY t ORDER BY t", (bucket, interval))
             return [{"t": t.isoformat(), "dhw": _num(a), "buffer": _num(b),
                      "supply": _num(c), "outside": _num(d)} for t, a, b, c, d in cur.fetchall()]
@@ -278,7 +278,7 @@ def _wp_comp(conn, interval, bucket):
             cur.execute(
                 "SELECT time_bucket(%s::interval, time) AS t, "
                 "round(avg(compressor_speed_rps)::numeric,1), max(compressor_starts) "
-                "FROM heatpump_vicare WHERE time > now() - %s::interval GROUP BY t ORDER BY t",
+                "FROM heatpump_telemetry WHERE time > now() - %s::interval GROUP BY t ORDER BY t",
                 (bucket, interval))
             rows = cur.fetchall()
     except Exception as e:
@@ -298,7 +298,7 @@ def _wp_comp(conn, interval, bucket):
 
 def _wp_eff(conn, interval, nominal_w):
     """Per-day estimated WP energy (run-time x nominal, since the Shelly can't meter) + SCOP.
-    Both are approximate — run-time is solid, ViCare energy/SCOP lag ~1-2 days."""
+    Both are approximate — run-time is solid, heat-pump telemetry energy/SCOP lag ~1-2 days."""
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -308,7 +308,7 @@ def _wp_eff(conn, interval, nominal_w):
             run = {d.date(): float(h or 0) for d, h in cur.fetchall()}
             cur.execute(
                 "SELECT time_bucket('1 day', time) AS day, round(avg(scop_total)::numeric,2) "
-                "FROM heatpump_vicare WHERE time > now() - %s::interval GROUP BY day ORDER BY day",
+                "FROM heatpump_telemetry WHERE time > now() - %s::interval GROUP BY day ORDER BY day",
                 (interval,))
             scop = {d.date(): _num(s) for d, s in cur.fetchall()}
     except Exception as e:

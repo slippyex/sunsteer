@@ -78,10 +78,10 @@
         </div>
       </div>
 
-      {# .grid4 row: vicare (spans 2 as display:contents → two panels), inverter, weather #}
+      {# .grid4 row: heatpump (spans 2 as display:contents → two panels), inverter, weather #}
       <div class="grid4">
-        {# vicare emits TWO .panel blocks; display:contents makes them direct grid items #}
-        <div id="vicare" style="display:contents" hx-get="/partials/vicare" hx-trigger="load, every 60s" hx-swap="innerHTML"></div>
+        {# heatpump emits TWO .panel blocks; display:contents makes them direct grid items #}
+        <div id="heatpump" style="display:contents" hx-get="/partials/heatpump" hx-trigger="load, every 60s" hx-swap="innerHTML"></div>
         {# inverter partial renders the full .panel (header carries the dynamic status tag) #}
         <div id="inverter" style="display:contents" hx-get="/partials/inverter" hx-trigger="load, every 30s" hx-swap="innerHTML"></div>
         <div class="panel">
