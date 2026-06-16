@@ -103,7 +103,7 @@ def connect_with_retry(token_file, max_backoff=1800, max_invalid_attempts=5):
                           e, invalid_attempts, max_invalid_attempts)
                 if invalid_attempts >= max_invalid_attempts:
                     raise SystemExit(
-                        "vicare-exporter: ViCare credentials rejected "
+                        "heatpump-exporter (vicare driver): ViCare credentials rejected "
                         f"{invalid_attempts}x in a row — exiting so the failure is visible "
                         "(CrashLoopBackOff) instead of silently burning the API budget. "
                         "Fix VICARE_USER/VICARE_PASS/VICARE_CLIENT_ID.") from e
