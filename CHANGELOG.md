@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [0.4.0] - 2026-06-16
+
+Generic, vendor-neutral heat-pump telemetry. **Breaking:** the ViCare-specific service, DB table
+and metric names are replaced by a generic contract behind a pluggable driver.
+
+### Changed
+- **`vicare-exporter` → `heatpump-exporter`** with a `HEATPUMP_DRIVER` (`vicare` | `mock`) behind
+  a `HeatPumpDriver` protocol — the heat-pump analogue of `METER_DRIVER`. ViCare is now one
+  driver; a `mock` driver renders the heat-pump card in the zero-config demo.
+- DB table `heatpump_vicare` → **`heatpump_telemetry`** (migration `003`, data preserved).
+- Prometheus telemetry metrics `vicare_*` → **`heatpump_*`** (vendor-API ops stay `vicare_*`).
+- control-ui is vendor-neutral; the heat-pump card name comes from **`HEATPUMP_LABEL`**.
+
+### Added
+- `docs/heatpump-interface.md` — the generic telemetry contract + "bring your own driver".
+
+### Upgrade
+- Apply migration `003` (the compose `db-migrate` one-shot does this automatically).
+- Switch the image `vicare-exporter:0.3.x` → `heatpump-exporter:0.4.0` with `HEATPUMP_DRIVER=vicare`
+  (keep your existing `VICARE_*` secrets).
+- Update any custom Grafana panels / external scrapers from `vicare_*`/`heatpump_vicare` to
+  `heatpump_*`/`heatpump_telemetry`. Set `HEATPUMP_LABEL` (e.g. `Vitocal 250 A06`).
+
 ## [0.3.2] - 2026-06-15
 
 Maintenance release: routine dependency and CI-action updates (via Dependabot). No code or
@@ -207,7 +230,8 @@ Initial public release.
 - Docker Compose stack, a zero-config demo (`docker-compose.demo.yml`), and multi-arch
   (`amd64` + `arm64`) images on GHCR.
 
-[Unreleased]: https://github.com/slippyex/sunsteer/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/slippyex/sunsteer/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/slippyex/sunsteer/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/slippyex/sunsteer/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/slippyex/sunsteer/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/slippyex/sunsteer/compare/v0.2.2...v0.3.0
