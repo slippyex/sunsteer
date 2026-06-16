@@ -65,10 +65,10 @@ groups:
           summary: "energy-exporter is failing to poll a source"
           description: "Repeated read failures from {{ $labels.source }} (relay state or inverter Modbus). Meter readings may be unaffected, but relay-state/telemetry could be stale."
 
-      - alert: ViCareExporterStale
-        expr: time() - vicare_last_success_timestamp_seconds > 3600
+      - alert: HeatpumpTelemetryStale
+        expr: time() - heatpump_last_success_timestamp_seconds > 3600
         for: 0m
         labels: { severity: warning }
         annotations:
-          summary: "ViCare telemetry has not updated for over an hour"
+          summary: "Heat-pump telemetry has not updated for over an hour"
           description: "The optional heat-pump telemetry exporter has not polled successfully (auth expired, rate-limited, or down). Control is unaffected; dashboards go stale."
