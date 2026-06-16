@@ -1,12 +1,12 @@
-"""Persist a datapoint dict to heatpump_vicare. Tolerant: NULLs allowed."""
+"""Persist a datapoint dict to heatpump_telemetry. Tolerant: NULLs allowed."""
 import logging
 from collections.abc import Callable
 
 import psycopg2
 
-from .extract import FIELDS
+from .contract import HEATPUMP_FIELDS
 
-COLUMNS = list(FIELDS)  # writer names columns explicitly, so DDL order is irrelevant
+COLUMNS = list(HEATPUMP_FIELDS)  # writer names columns explicitly, so DDL order is irrelevant
 
 _log = logging.getLogger(__name__)
 
@@ -52,5 +52,5 @@ def write(conn, data):
     params = [data.get(c) for c in COLUMNS]
     with conn.cursor() as cur:
         cur.execute(
-            f"INSERT INTO heatpump_vicare (time, {cols}) VALUES (now(), {placeholders})",
+            f"INSERT INTO heatpump_telemetry (time, {cols}) VALUES (now(), {placeholders})",
             params)

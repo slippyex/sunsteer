@@ -94,6 +94,19 @@ def test_heatpump_telemetry_table_exists_and_vicare_is_gone():
     assert old is None            # heatpump_vicare no longer exists
 
 
+def test_heatpump_writer_against_real_schema():
+    _drop_src_modules()
+    sys.path.insert(0, os.path.join(ROOT, "services", "vicare-exporter"))
+    from src import tsdb_writer as w  # type: ignore
+    c = _conn()
+    w.write(c, {"dhw_temp_c": 51.0, "compressor_starts": 5})
+    with c.cursor() as cur:
+        cur.execute("SELECT dhw_temp_c, compressor_starts FROM heatpump_telemetry ORDER BY time DESC LIMIT 1")
+        row = cur.fetchone()
+    c.close()
+    assert row == (51.0, 5.0)
+
+
 def test_daily_production_survives_a_midday_counter_reset():
     # production_kwh_total is a monotonic lifetime counter. If the inverter resets it mid-day,
     # max(total)-min(total) reports a wildly wrong figure (the whole lifetime span). The real

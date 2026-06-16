@@ -31,7 +31,7 @@ def test_write_builds_insert_with_all_fields():
     data["dhw_temp_c"] = 52.6
     data["compressor_starts"] = 194
     tsdb_writer.write(conn, data)
-    assert "INSERT INTO heatpump_vicare (time," in conn.cur.sql
+    assert "INSERT INTO heatpump_telemetry (time," in conn.cur.sql
     assert conn.cur.params[tsdb_writer.COLUMNS.index("dhw_temp_c")] == 52.6
     assert conn.cur.params[tsdb_writer.COLUMNS.index("compressor_starts")] == 194
     assert len(conn.cur.params) == len(tsdb_writer.COLUMNS)
