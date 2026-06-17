@@ -104,7 +104,8 @@ def connect(host, port, db, user, password):
 _CONFIG_COLS = ["mode", "manual_relay_on", "threshold_base_w", "threshold_min_w",
                 "threshold_off_w", "on_delay_cycles", "off_delay_cycles", "min_runtime_s",
                 "min_offtime_s", "adapt_enabled", "full_sun_ref_kwh",
-                "feed_in_tariff_eur_kwh", "grid_price_eur_kwh", "wp_nominal_power_w"]
+                "feed_in_tariff_eur_kwh", "grid_price_eur_kwh", "wp_nominal_power_w",
+                "base_load_percentile"]
 
 
 def load_config(conn):

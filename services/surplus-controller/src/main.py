@@ -129,7 +129,7 @@ _forecast_remaining = None   # kWh, updated by the slow timer
 # Rolling household base-load (consumption minus the WP), driven from /state each fresh cycle.
 # available = production - base_load is the real PV headroom; falls back to the nominal-load
 # compensation until warmed up or while the inverter is stale.
-_baseload = BaseLoad(window_s=3600, percentile=20, min_warmup_s=1200)
+_baseload = BaseLoad(window_s=3600, min_samples=20, max_stale_s=21600)
 
 
 def _num(x):
@@ -333,9 +333,12 @@ def main():
             # excluded consumption (production - surplus). Fall back to nominal compensation
             # until the estimator is warmed up or while the inverter is stale.
             production = _num(st.get("production_w")) if st else None
-            if production is not None and surplus_raw is not None and state_fresh:
-                _baseload.update(time.monotonic(), production - surplus)
-            base_load = _baseload.estimate()
+            # Feed the estimator ONLY with household (relay-OFF) consumption — the WP's own draw
+            # must not contaminate the baseline. Hold-last (baseload.py) carries the estimate
+            # through a long continuous run; the percentile is hot-reloaded from config.
+            if production is not None and surplus_raw is not None and state_fresh and not relay_on:
+                _baseload.update(time.monotonic(), max(0.0, production - surplus))
+            base_load = _baseload.estimate(time.monotonic(), cfg["base_load_percentile"])
             available, basis = available_and_basis(
                 surplus, production, base_load, relay_on, sun_up, cfg["wp_nominal_power_w"])
             avail, on_streak, off_streak, target, action, reason = decide_action(

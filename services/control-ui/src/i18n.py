@@ -41,8 +41,8 @@ S = {
     "pv_window":        ("PV-Fenster", "PV window"),
     "kpi_headroom":    ("PV-Headroom (WP)", "PV headroom (HP)"),
     "headroom_basis":  ("Basis", "Basis"),
-    "basis_production": ("Produktion − Grundlast", "production − base load"),
-    "basis_nominal":   ("Schätzung (Aufwärmphase / kein WR)", "estimate (warm-up / no inverter)"),
+    "basis_production": ("gemessen", "measured"),
+    "basis_nominal":   ("geschätzt", "estimated"),
     "kpi_base_load":   ("Grundlast", "base load"),
 
     # ── why card (rendered in explain.py) ──────────────────────────────────
@@ -250,6 +250,13 @@ S = {
     "f_wp_nominal":       ("WP-Nennleistung", "HP nominal power"),
     "h_wp_nominal":       ("Elektrische Leistungsaufnahme der Wärmepumpe im Betrieb. Der Shelly misst sie nicht (reiner SG-Ready-Signalkontakt), daher wird WP-Leistung & selbst genutzte kWh aus Laufzeit × diesem Wert GESCHÄTZT. Bei einem echten Zähler (z. B. Shelly EM) später ersetzbar.",
                            "Electrical draw of the heat pump while running. The Shelly doesn't meter it (pure SG-Ready signal contact), so HP power & self-consumed kWh are ESTIMATED from runtime × this value. Replaceable once a real meter (e.g. Shelly EM) exists."),
+    "f_base_load_pct": ("Grundlast-Perzentil", "Base-load percentile"),
+    "h_base_load_pct": ("Anteil des Haushaltsverbrauchs, der für den Haushalt reserviert wird, "
+                        "bevor die WP den PV-Rest bekommt. Höher = WP zurückhaltender, "
+                        "niedriger = WP läuft mehr. Default 50.",
+                        "Share of household consumption reserved for the house before the heat "
+                        "pump gets the remaining PV. Higher = pump more conservative, lower = pump "
+                        "runs more. Default 50."),
     "adaptive_threshold": ("Adaptive Schwelle", "Adaptive threshold"),
     "h_adaptive":         ("An: die Schwelle sinkt bei guter Solar-Prognose Richtung Min-Schwelle. Aus: immer die Basis-Schwelle.",
                            "On: the threshold drops towards the min threshold when the solar forecast is good. Off: always the base threshold."),

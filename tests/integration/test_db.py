@@ -170,3 +170,11 @@ def test_harvest_summary_tolerant_on_bad_conn():
     h = sources.harvest_summary(Dead(), "today", 2000, 0.30, 0.08)
     assert h == {"self_kwh": None, "self_eur": None, "wasted_kwh": None,
                  "wasted_eur": None, "cop": None}
+
+
+def test_control_config_has_base_load_percentile():
+    c = _conn()
+    with c.cursor() as cur:
+        cur.execute("SELECT base_load_percentile FROM control_config WHERE id = 1")
+        val = cur.fetchone()[0]
+    assert val == 50    # migration default

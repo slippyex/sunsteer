@@ -34,6 +34,7 @@ def validate_settings(form: dict):
     feed = _num(form, "feed_in_tariff_eur_kwh", e, float, lo=0, hi=2)
     grid = _num(form, "grid_price_eur_kwh", e, float, lo=0, hi=2)
     wp_nom = _num(form, "wp_nominal_power_w", e, float, lo=0, hi=20000)
+    bl_pct = _num(form, "base_load_percentile", e, float, lo=5, hi=95)
 
     if base is not None and mn is not None and mn > base:
         e["threshold_min_w"] = "Min-Schwelle darf nicht über der Basis liegen"
@@ -50,4 +51,5 @@ def validate_settings(form: dict):
         "full_sun_ref_kwh": ref,
         "feed_in_tariff_eur_kwh": feed, "grid_price_eur_kwh": grid,
         "wp_nominal_power_w": wp_nom,
+        "base_load_percentile": bl_pct,
     }, {}

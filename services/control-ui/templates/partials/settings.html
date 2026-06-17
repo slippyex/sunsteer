@@ -44,6 +44,8 @@
            help=t('h_grid_price')) }}
   {{ field('wp_nominal_power_w',     t('f_wp_nominal'),      c.wp_nominal_power_w     if c else 2000, 'W',
            help=t('h_wp_nominal')) }}
+  {{ field('base_load_percentile', t('f_base_load_pct'), c.base_load_percentile if c else 50, '%',
+           help=t('h_base_load_pct')) }}
 
   {# ── Adaptive toggle ─────────────────────────────────────────────── #}
   <div class="f">

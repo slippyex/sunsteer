@@ -7,7 +7,7 @@ def base_form():
             "min_runtime_min": "30", "min_offtime_min": "15",
             "adapt_enabled": "on", "full_sun_ref_kwh": "40",
             "feed_in_tariff_eur_kwh": "0.08", "grid_price_eur_kwh": "0.30",
-            "wp_nominal_power_w": "2000"}
+            "wp_nominal_power_w": "2000", "base_load_percentile": "50"}
 
 
 def test_wp_nominal_power_parses():

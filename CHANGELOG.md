@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [0.5.2] - 2026-06-17
+
+### Changed
+- The base-load estimate is now sampled **only while the heat-pump relay is OFF**, so the pump's
+  own draw can no longer contaminate the household baseline during a long continuous run (it had
+  drifted up toward the WP nominal, understating the real headroom). The last good value is held
+  for up to 6 h while the pump runs, then the controller falls back to the nominal path.
+
+### Added
+- `base_load_percentile` (default 50) — a hot-reloadable setting controlling how much PV is
+  reserved for the household before the heat pump gets the rest. Migration
+  `db/migrations/004-base-load-percentile.sql`.
+
+### Fixed
+- The web-UI headroom panel no longer wraps; the base load is its own KPI row and the basis shows
+  a clear "measured" / "estimated".
+
 ## [0.5.1] - 2026-06-16
 
 ### Added
@@ -281,7 +298,8 @@ Initial public release.
 - Docker Compose stack, a zero-config demo (`docker-compose.demo.yml`), and multi-arch
   (`amd64` + `arm64`) images on GHCR.
 
-[Unreleased]: https://github.com/slippyex/sunsteer/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/slippyex/sunsteer/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/slippyex/sunsteer/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/slippyex/sunsteer/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/slippyex/sunsteer/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/slippyex/sunsteer/compare/v0.4.1...v0.4.2

@@ -259,21 +259,38 @@ def test_non_numeric_state_field_degrades_to_blind_not_a_crash(monkeypatch):
     assert M.metrics.LOOP_ERRORS.labels("cycle")._value.get() == before_cycle
 
 
-def test_baseload_fed_only_on_fresh_reads_with_production(monkeypatch):
-    # The estimator is fed WP-excluded consumption (production - surplus) ONLY on a fresh read
-    # carrying production_w — a blind read must never poison the rolling window.
+def test_baseload_fed_only_when_relay_off(monkeypatch):
+    # OFF-only: a fresh read carrying production_w feeds household consumption ONLY while the
+    # relay is OFF — the WP's own draw must never enter the baseline.
     fed = []
 
     class SpyBaseLoad:
         def update(self, now, consumption_w):
             fed.append(consumption_w)
-        def estimate(self):
+        def estimate(self, now, percentile):
             return None      # keep the nominal fallback so the decision path is unaffected
 
     monkeypatch.setattr(M, "_baseload", SpyBaseLoad())
-    states = [dict(fresh(500), production_w=2500), None]   # fresh+production, then blind
-    run_loop(monkeypatch, states, relay_seed=True)
-    assert fed == [2000.0]      # 2500 - 500 once; the blind cycle fed nothing
+    # shelly_on=False matches the seeded-OFF relay so the external resync doesn't flip relay_on
+    # to ON before the feed (the OFF-only gate must see a genuinely-off relay).
+    states = [dict(fresh(500, shelly_on=False), production_w=2500), None]   # fresh+prod, then blind
+    run_loop(monkeypatch, states, relay_seed=False)        # relay OFF
+    assert fed == [2000.0]      # 2500 - 500 once; blind cycle fed nothing
+
+
+def test_baseload_not_fed_while_relay_on(monkeypatch):
+    fed = []
+
+    class SpyBaseLoad:
+        def update(self, now, consumption_w):
+            fed.append(consumption_w)
+        def estimate(self, now, percentile):
+            return None
+
+    monkeypatch.setattr(M, "_baseload", SpyBaseLoad())
+    states = [dict(fresh(500), production_w=2500)]
+    run_loop(monkeypatch, states, relay_seed=True)         # relay ON -> no feeding
+    assert fed == []
 
 
 def test_decide_action_high_available_stays_on():

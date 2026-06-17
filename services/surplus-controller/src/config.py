@@ -16,6 +16,7 @@ DEFAULTS = {
     "grid_price_eur_kwh": 0.30,
     "wp_nominal_power_w": 2000.0,  # estimated WP electrical draw (Shelly can't meter it)
     "pv_performance_ratio": 0.70,  # Open-Meteo GTI -> kWh; self-calibrated from actual production
+    "base_load_percentile": 50.0,  # percentile of household (relay-OFF) consumption -> base_load
 }
 _VALID_MODES = ("auto", "manual", "paused")
 # When a bad row sets off-threshold >= min-threshold, drop off this far below min to keep the
@@ -57,6 +58,7 @@ def clamp_config(cfg: dict) -> dict:
     c["grid_price_eur_kwh"] = max(0.0, float(c["grid_price_eur_kwh"]))
     c["wp_nominal_power_w"] = max(0.0, min(float(c["wp_nominal_power_w"]), _WP_POWER_CAP_W))
     c["pv_performance_ratio"] = max(_PR_MIN, min(float(c["pv_performance_ratio"]), _PR_MAX))
+    c["base_load_percentile"] = max(5.0, min(95.0, float(c["base_load_percentile"])))
     return c
 
 

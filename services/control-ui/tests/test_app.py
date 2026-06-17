@@ -272,6 +272,7 @@ _VALID_SETTINGS = {
     "on_delay_cycles": "3", "off_delay_cycles": "3", "min_runtime_min": "30",
     "min_offtime_min": "15", "full_sun_ref_kwh": "40", "feed_in_tariff_eur_kwh": "0.08",
     "grid_price_eur_kwh": "0.30", "wp_nominal_power_w": "2000", "adapt_enabled": "on",
+    "base_load_percentile": "50",
 }
 
 
@@ -341,7 +342,8 @@ def test_write_handlers_degrade_when_db_down(monkeypatch):
     valid = {"threshold_base_w": "2500", "threshold_min_w": "1500", "threshold_off_w": "200",
              "on_delay_cycles": "3", "off_delay_cycles": "3", "min_runtime_min": "30",
              "min_offtime_min": "15", "full_sun_ref_kwh": "40", "feed_in_tariff_eur_kwh": "0.08",
-             "grid_price_eur_kwh": "0.30", "wp_nominal_power_w": "2000"}
+             "grid_price_eur_kwh": "0.30", "wp_nominal_power_w": "2000",
+             "base_load_percentile": "50"}
     assert c.post("/settings", data=valid).status_code == 200
 
 
@@ -642,6 +644,7 @@ def test_partials_status_shows_headroom_basis(monkeypatch):
     r = c.get("/partials/status")
     assert r.status_code == 200
     assert "3450" in r.text and "550" in r.text   # headroom + base-load rendered
+    assert "gemessen" in r.text or "measured" in r.text   # basis word (0.5.2 cleanup)
 
 
 def test_index_shows_version(monkeypatch):
@@ -652,3 +655,26 @@ def test_index_shows_version(monkeypatch):
     r = c.get("/")
     assert r.status_code == 200
     assert "9.9.9" in r.text
+
+
+def test_validate_settings_accepts_base_load_percentile():
+    from src import validation
+    form = {"threshold_base_w": "2500", "threshold_min_w": "1500", "threshold_off_w": "200",
+            "on_delay_cycles": "3", "off_delay_cycles": "3", "min_runtime_min": "30",
+            "min_offtime_min": "15", "full_sun_ref_kwh": "40", "feed_in_tariff_eur_kwh": "0.08",
+            "grid_price_eur_kwh": "0.30", "wp_nominal_power_w": "2000",
+            "base_load_percentile": "65"}
+    clean, errors = validation.validate_settings(form)
+    assert errors == {}
+    assert clean["base_load_percentile"] == 65
+
+
+def test_validate_settings_rejects_out_of_range_percentile():
+    from src import validation
+    form = {"threshold_base_w": "2500", "threshold_min_w": "1500", "threshold_off_w": "200",
+            "on_delay_cycles": "3", "off_delay_cycles": "3", "min_runtime_min": "30",
+            "min_offtime_min": "15", "full_sun_ref_kwh": "40", "feed_in_tariff_eur_kwh": "0.08",
+            "grid_price_eur_kwh": "0.30", "wp_nominal_power_w": "2000",
+            "base_load_percentile": "99"}
+    clean, errors = validation.validate_settings(form)
+    assert "base_load_percentile" in errors and clean == {}
