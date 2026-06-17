@@ -49,7 +49,7 @@ services:
     restart: "no"
 
   energy-exporter:
-    image: ghcr.io/slippyex/sunsteer/energy-exporter:${SUNSTEER_VERSION:-0.5.2}
+    image: ghcr.io/slippyex/sunsteer/energy-exporter:${SUNSTEER_VERSION:-0.5.3}
     build: ../../services/energy-exporter
     # Host network is REQUIRED for the SMA Speedwire multicast (239.12.255.254:9522) —
     # it does not cross Docker's bridge NAT. Ports 9120 (metrics) / 9121 (/state) bind
@@ -87,7 +87,7 @@ services:
     restart: unless-stopped
 
   surplus-controller:
-    image: ghcr.io/slippyex/sunsteer/surplus-controller:${SUNSTEER_VERSION:-0.5.2}
+    image: ghcr.io/slippyex/sunsteer/surplus-controller:${SUNSTEER_VERSION:-0.5.3}
     build: ../../services/surplus-controller
     environment:
       EXPORTER_STATE_URL: http://host.docker.internal:9121/state   # exporter runs on the host net
@@ -122,7 +122,7 @@ services:
     restart: unless-stopped
 
   control-ui:
-    image: ghcr.io/slippyex/sunsteer/control-ui:${SUNSTEER_VERSION:-0.5.2}
+    image: ghcr.io/slippyex/sunsteer/control-ui:${SUNSTEER_VERSION:-0.5.3}
     build: ../../services/control-ui
     environment:
       PV_LAT: ${PV_LAT}
@@ -134,7 +134,7 @@ services:
       ADMIN_PASS: ${ADMIN_PASS}
       ALLOWED_ORIGIN: ${ALLOWED_ORIGIN:-}   # set to the public origin when behind a reverse proxy
       GRAFANA_URL: ${GRAFANA_URL:-}
-      SUNSTEER_VERSION: ${SUNSTEER_VERSION:-0.5.2}
+      SUNSTEER_VERSION: ${SUNSTEER_VERSION:-0.5.3}
       # Must match the exporter's TSDB_FLUSH_SECONDS so runtime/kWh math is correct.
       TSDB_FLUSH_SECONDS: ${TSDB_FLUSH_SECONDS:-60}
       DB_HOST: timescaledb
@@ -165,7 +165,7 @@ services:
     restart: unless-stopped
 
   heatpump-exporter:
-    image: ghcr.io/slippyex/sunsteer/heatpump-exporter:${SUNSTEER_VERSION:-0.5.2}
+    image: ghcr.io/slippyex/sunsteer/heatpump-exporter:${SUNSTEER_VERSION:-0.5.3}
     build: ../../services/heatpump-exporter
     profiles: ["vicare"]
     environment:

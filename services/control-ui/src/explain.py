@@ -14,17 +14,13 @@ def _min_left(total_s, elapsed_s):
 
 
 def energy_today(e_total, th_heating, th_dhw):
-    """Heat-pump daily energy view. The telemetry posts the THERMAL day-counter before the
-    ELECTRICAL one, so a period can show thermal > 0 while electrical is still 0 (lagging) —
-    which would render an impossible 0 kWh-in / N kWh-out pair (and an infinite COP).
-    Flag that case (`el_pending`) instead, and only compute COP once both sides are real.
-    Returns {th_total, el_pending, cop_today}."""
+    """Heat-pump daily THERMAL energy (kWh). We do NOT derive a COP here: dividing the thermal
+    counter by the electrical one mixes counters of different freshness (ViCare's electrical
+    day-value lags), which produced impossible figures. The UI shows the measured thermal and
+    electrical kWh side by side instead, each with ViCare's own `dayValueReadAt` date."""
     th = (th_heating or 0) + (th_dhw or 0)
     th_total = round(th, 1) if (th_heating is not None or th_dhw is not None) else None
-    el_real = bool(e_total and e_total > 0)
-    el_pending = (th_total or 0) > 0 and not el_real
-    cop_today = round(th / e_total, 1) if (el_real and th > 0) else None
-    return {"th_total": th_total, "el_pending": el_pending, "cop_today": cop_today}
+    return {"th_total": th_total}
 
 
 def explain(status, cfg, lang="en"):

@@ -1,4 +1,4 @@
-from src.explain import effectiveness_eur, energy_today, explain
+from src.explain import effectiveness_eur, explain
 
 CFG = {"wp_nominal_power_w": 2000, "threshold_off_w": 200}
 
@@ -73,28 +73,13 @@ def test_effectiveness_eur():
     assert effectiveness_eur(0, 0.30, 0.08) == 0.0
 
 
-def test_energy_today_complete():
-    # both electrical and thermal present -> real COP, not pending
-    r = energy_today(e_total=2.0, th_heating=4.0, th_dhw=2.0)
-    assert r["th_total"] == 6.0
-    assert r["el_pending"] is False
-    assert r["cop_today"] == 3.0
-
-
-def test_energy_today_lagging_electrical():
-    # ViCare posted thermal (7.9) but electrical still 0 -> pending, no impossible COP
-    r = energy_today(e_total=0.0, th_heating=1.4, th_dhw=6.5)
-    assert r["th_total"] == 7.9
-    assert r["el_pending"] is True
-    assert r["cop_today"] is None
-
-
-def test_energy_today_no_data():
-    # nothing reported yet -> not pending (nothing to contradict), no COP
-    r = energy_today(e_total=None, th_heating=None, th_dhw=None)
-    assert r["th_total"] is None
-    assert r["el_pending"] is False
-    assert r["cop_today"] is None
+def test_energy_today_has_no_derived_cop():
+    from src import explain
+    # frozen ViCare case: tiny electrical, climbing thermal — must NOT yield a COP at all
+    r = explain.energy_today(0.2, 14.0, 0.9)
+    assert "cop_today" not in r
+    assert r["th_total"] == 14.9
+    assert explain.energy_today(None, None, None)["th_total"] is None
 
 
 def test_explain_english():

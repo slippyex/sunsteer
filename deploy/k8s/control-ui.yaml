@@ -21,7 +21,7 @@ spec:
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: control-ui
-          image: ghcr.io/slippyex/sunsteer/control-ui:0.5.2  # pinned; kustomize images: bumps it too
+          image: ghcr.io/slippyex/sunsteer/control-ui:0.5.3  # pinned; kustomize images: bumps it too
           imagePullPolicy: IfNotPresent
           env:
             - { name: PYTHONDONTWRITEBYTECODE, value: "1" }   # readOnlyRootFilesystem
@@ -30,7 +30,7 @@ spec:
             - { name: PV_TZ, value: "UTC" }
             - { name: UI_DEFAULT_LANG, value: "en" }
             - { name: GRAFANA_URL, value: "" }            # optional: Grafana link (hidden when empty)
-            - { name: SUNSTEER_VERSION, value: "0.5.2" }   # deploy-time tag, shown in the UI header
+            - { name: SUNSTEER_VERSION, value: "0.5.3" }   # deploy-time tag, shown in the UI header
             - { name: WEATHER_LOCATION, value: "" }        # optional: place name next to the weather panel
             - { name: TSDB_FLUSH_SECONDS, value: "60" }    # must match energy-exporter's write cadence
             # CSRF: POSTs require Origin == UI host. Behind an Ingress/reverse proxy the

@@ -4,6 +4,7 @@
   {{ t('export') }} <b>{{ b.export_kwh|round(1) }} kWh</b><br>
   {{ t('import') }} <b>{{ b.import_kwh|round(1) }} kWh</b><br>
   {{ t('self_consumption') }} <b>{{ (b.self_consumption * 100)|round|int }} %</b><br>
+  {{ t('autarky') }} <b>{{ (b.autarky * 100)|round|int }} %</b><br>
   {{ t('wp_runtime_today') }} <b>{{ b.wp_runtime_h|round(1) }} h</b><br>
   {{ t('savings_label') }} <b class="txt-c">{{ b.wp_today_kwh|round(1) }} kWh</b><br>
   {{ t('estimated') }} <b class="txt-g">{{ "%.2f"|format(b.eur_today) }} €</b>

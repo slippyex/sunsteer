@@ -315,3 +315,22 @@ def test_decide_action_low_available_releases():
         surplus=-565.0, available=-200.0, eff=1500.0, on_streak=0, off_streak=0,
         secs_since_on=9999, secs_since_off=9999)
     assert target is False and action == "switched_off"
+
+
+def test_baseload_drops_negative_household(monkeypatch):
+    # WR/SHM sampling skew can make production - surplus < 0 (impossible household). Such a
+    # sample must be DROPPED, not folded to 0 W (which would bias the baseline down).
+    fed = []
+
+    class SpyBaseLoad:
+        def update(self, now, consumption_w):
+            fed.append(consumption_w)
+        def estimate(self, now, percentile):
+            return None
+
+    monkeypatch.setattr(M, "_baseload", SpyBaseLoad())
+    # production 1500, surplus 2000 -> household = -500 (impossible) -> dropped.
+    # relay OFF (shelly_on=False, matching relay_seed) so the feed block is actually reached.
+    states = [dict(fresh(2000, shelly_on=False), production_w=1500)]
+    run_loop(monkeypatch, states, relay_seed=False)
+    assert fed == []

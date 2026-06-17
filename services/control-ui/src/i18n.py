@@ -115,6 +115,8 @@ S = {
     "starts":       ("Starts", "Starts"),
     "runtime":      ("Laufzeit", "Runtime"),
     "thermal":      ("therm.", "thermal"),
+    "electrical":   ("elektrisch", "electrical"),
+    "energy_as_of": ("Energie-Stand {d}", "energy as of {d}"),
     "el_pending_tip": ("Die Wärmepumpe meldet den elektrischen Tagesverbrauch verzögert nach der erzeugten Wärme. Sobald er da ist, erscheinen el. kWh und COP.",
                        "The heat pump reports the day's electrical consumption later than the heat produced. Once it arrives, elec. kWh and COP appear."),
 

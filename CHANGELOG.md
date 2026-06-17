@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [0.5.3] - 2026-06-17
+
+### Changed
+- The heat-pump card no longer derives its own COP (dividing thermal by electrical mixed ViCare
+  counters of different freshness and could show impossible figures). It now shows the measured
+  thermal and electrical kWh and SCOP/SPF, each labelled with ViCare's own data date
+  ("energy as of …") so stale ViCare statistics are self-evident.
+- Self-consumption and autarky are shown from the robust daily energy counters (reset-proof) in
+  the "Today" panel; the fragile instantaneous Prometheus-based versions were removed.
+
+### Fixed
+- The base-load estimator drops physically-impossible negative household samples (inverter/SHM
+  sampling skew) instead of folding them to 0 W.
+
 ## [0.5.2] - 2026-06-17
 
 ### Changed
@@ -298,7 +312,8 @@ Initial public release.
 - Docker Compose stack, a zero-config demo (`docker-compose.demo.yml`), and multi-arch
   (`amd64` + `arm64`) images on GHCR.
 
-[Unreleased]: https://github.com/slippyex/sunsteer/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/slippyex/sunsteer/compare/v0.5.3...HEAD
+[0.5.3]: https://github.com/slippyex/sunsteer/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/slippyex/sunsteer/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/slippyex/sunsteer/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/slippyex/sunsteer/compare/v0.4.2...v0.5.0

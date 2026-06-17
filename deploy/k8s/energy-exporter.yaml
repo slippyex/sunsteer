@@ -33,7 +33,7 @@ spec:
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: energy-exporter
-          image: ghcr.io/slippyex/sunsteer/energy-exporter:0.5.2  # pinned; kustomize images: bumps it too
+          image: ghcr.io/slippyex/sunsteer/energy-exporter:0.5.3  # pinned; kustomize images: bumps it too
           imagePullPolicy: IfNotPresent
           env:
             - { name: PYTHONDONTWRITEBYTECODE, value: "1" }   # readOnlyRootFilesystem

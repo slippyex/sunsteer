@@ -333,11 +333,13 @@ def main():
             # excluded consumption (production - surplus). Fall back to nominal compensation
             # until the estimator is warmed up or while the inverter is stale.
             production = _num(st.get("production_w")) if st else None
-            # Feed the estimator ONLY with household (relay-OFF) consumption — the WP's own draw
-            # must not contaminate the baseline. Hold-last (baseload.py) carries the estimate
-            # through a long continuous run; the percentile is hot-reloaded from config.
+            # Feed the estimator ONLY with household (relay-OFF) consumption. Drop physically-
+            # impossible negatives (inverter/SHM sampling skew on fast PV ramps) instead of
+            # folding them to 0 W, which would bias the baseline down.
             if production is not None and surplus_raw is not None and state_fresh and not relay_on:
-                _baseload.update(time.monotonic(), max(0.0, production - surplus))
+                household = production - surplus
+                if household >= 0:
+                    _baseload.update(time.monotonic(), household)
             base_load = _baseload.estimate(time.monotonic(), cfg["base_load_percentile"])
             available, basis = available_and_basis(
                 surplus, production, base_load, relay_on, sun_up, cfg["wp_nominal_power_w"])

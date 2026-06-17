@@ -38,16 +38,10 @@
     </div>
     <div class="row2">
       <span>{{ t('thermal') }} <b>{{ val(v.th_total, 'kWh', 1) }}</b></span>
-      <span>
-        {%- if v.el_pending -%}
-          <span class="note">COP &ndash; ¹</span>
-        {%- else -%}
-          COP <b>{{ val(v.cop_today, '', 1) }}</b>
-        {%- endif -%}
-      </span>
+      <span>{{ t('electrical') }} <b>{{ val(v.e_total, 'kWh', 1) }}</b></span>
     </div>
-    {% if v.el_pending %}
-    <div class="note" style="margin-top:6px;">¹ {{ t('el_pending_tip') }}</div>
+    {% if v.energy_read_at_str %}
+    <div class="note" style="margin-top:6px;">{{ t('energy_as_of', d=v.energy_read_at_str) }}</div>
     {% endif %}
     {% if v.heatingrod_today and v.heatingrod_today > 0 %}
     <div class="note" style="margin-top:6px;">⚠ {{ t('rod_warn', kwh=v.heatingrod_today|round(1)) }}</div>

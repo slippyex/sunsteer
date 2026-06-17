@@ -545,7 +545,8 @@ def controller_status(url, timeout=4.0):
 
 
 _EMPTY_SUMMARY = {"prod_kwh": 0.0, "export_kwh": 0.0, "import_kwh": 0.0,
-                  "self_consumption": 0.0, "wp_runtime_h": 0.0, "wp_runtime_total_h": 0.0}
+                  "self_consumption": 0.0, "autarky": 0.0,
+                  "wp_runtime_h": 0.0, "wp_runtime_total_h": 0.0}
 
 
 def today_summary(conn):
@@ -586,7 +587,11 @@ def today_summary(conn):
         log.warning("today_summary: %s", e)
         return dict(_EMPTY_SUMMARY)
     prod = float(prod or 0)
-    sc = ((prod - float(exp or 0)) / prod) if prod > 0 else 0.0
+    self_kwh = prod - float(exp or 0)                 # PV self-consumed
+    cons = self_kwh + float(imp or 0)                 # household + WP consumption
+    sc = (self_kwh / prod) if prod > 0 else 0.0
+    autarky = (self_kwh / cons) if cons > 0 else 0.0
     return {"prod_kwh": prod, "export_kwh": float(exp or 0), "import_kwh": float(imp or 0),
             "self_consumption": max(0.0, min(1.0, sc)),
+            "autarky": max(0.0, min(1.0, autarky)),
             "wp_runtime_h": float(runtime or 0), "wp_runtime_total_h": float(runtime_total or 0)}

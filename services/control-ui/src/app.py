@@ -175,7 +175,6 @@ _LIVE = {
     "relay": "surplus_control_relay_on", "mode_num": "surplus_control_mode",
     "threshold": "surplus_control_effective_threshold_watts",
     "remaining_kwh": "surplus_control_forecast_remaining_kwh",
-    "self_consumption": "energy:self_consumption_ratio", "autarky": "energy:autarky_ratio",
     "available": "surplus_control_available_watts",
     "base_load": "surplus_control_base_load_watts",
     "basis": "surplus_control_available_basis",
@@ -265,21 +264,8 @@ def _db_optional():
                 conn.close()
 
 
-def _ratio_pct_ok(v):
-    """Self-consumption / autarky are ratios in [0,1]. Their recording rules divide by
-    production / consumption, which is ~0 while the inverter is in error (production=0) — the
-    division then yields absurd values (e.g. -667 -> -66750 %). Treat anything outside a small
-    tolerance as undefined (None -> the UI shows a dash); clamp small averaging overshoots."""
-    if v is None or not (-0.1 <= v <= 1.1):   # within a small tolerance -> a real (clampable) ratio
-        return None
-    return max(0.0, min(1.0, v))
-
-
 def _live():
     v = {k: sources.prom_query(PROM, e) for k, e in _LIVE.items()}
-    # Ratios are only meaningful in [0,1]; guard against the rule dividing by ~0 production.
-    v["self_consumption"] = _ratio_pct_ok(v.get("self_consumption"))
-    v["autarky"] = _ratio_pct_ok(v.get("autarky"))
     now = time.time()
     v["mode"] = _MODE_NAME.get(int(v["mode_num"]), "?") if v.get("mode_num") is not None else "?"
     v["health"] = {

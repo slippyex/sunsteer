@@ -133,7 +133,7 @@ def test_balance_partial_renders(monkeypatch):
     monkeypatch.setattr(appmod, "_db", lambda: type("C", (), {"close": lambda self: None})())
     monkeypatch.setattr(appmod.sources, "today_summary", lambda c: {
         "prod_kwh": 38.0, "export_kwh": 31.0, "import_kwh": 4.0, "self_consumption": 0.18,
-        "wp_runtime_h": 1.4, "wp_runtime_total_h": 5.0})
+        "autarky": 0.64, "wp_runtime_h": 1.4, "wp_runtime_total_h": 5.0})
     r = TestClient(appmod.app).get("/partials/balance?lang=de")
     # nominal 2000 W × 1.4 h = 2.8 kWh today, × 5.0 h = 10.0 kWh total (estimated)
     assert r.status_code == 200 and "selbst genutzt" in r.text
@@ -548,7 +548,7 @@ def test_balance_survives_null_config_prices(monkeypatch):
         "grid_price_eur_kwh": None, "feed_in_tariff_eur_kwh": None, "wp_nominal_power_w": None})
     monkeypatch.setattr(appmod.sources, "today_summary", lambda c: {
         "prod_kwh": 0.0, "export_kwh": 0.0, "import_kwh": 0.0,
-        "self_consumption": 0.0, "wp_runtime_h": 0.0, "wp_runtime_total_h": 0.0})
+        "self_consumption": 0.0, "autarky": 0.0, "wp_runtime_h": 0.0, "wp_runtime_total_h": 0.0})
     monkeypatch.setattr(appmod.sources, "solar_forecast_today", lambda c: {})
     r = TestClient(appmod.app).get("/partials/balance")
     assert r.status_code == 200
@@ -569,18 +569,6 @@ def test_heatpump_label_shown_as_tag(monkeypatch):
     monkeypatch.setattr(appmod.sources, "prom_query", lambda *a, **k: 1.0)
     r = TestClient(appmod.app).get("/partials/heatpump")
     assert "Vitocal 250 A06" in r.text
-
-
-def test_ratio_guard_rejects_nonsensical_and_clamps():
-    # Eigenverbrauch/Autarkie are ratios in [0,1]. When the inverter is in error (production≈0)
-    # the recording rule divides by ~0 and returns absurd values (the -66750% bug). Treat
-    # anything outside a small tolerance as undefined (-> dash); clamp tiny overshoots.
-    from src.app import _ratio_pct_ok
-    assert _ratio_pct_ok(-667.5) is None      # the -66750% case
-    assert _ratio_pct_ok(None) is None
-    assert _ratio_pct_ok(0.85) == 0.85
-    assert _ratio_pct_ok(1.02) == 1.0         # averaging overshoot clamps to 100%
-    assert _ratio_pct_ok(-0.004) == 0.0
 
 
 def test_live_formats_sun_window(monkeypatch):
@@ -678,3 +666,17 @@ def test_validate_settings_rejects_out_of_range_percentile():
             "base_load_percentile": "99"}
     clean, errors = validation.validate_settings(form)
     assert "base_load_percentile" in errors and clean == {}
+
+
+def test_today_summary_includes_autarky():
+    from src import sources
+    # autarky = self-consumed / consumption; with a dead conn it degrades to the zero dict.
+    class Dead:
+        def cursor(self): raise RuntimeError("db down")
+    s = sources.today_summary(Dead())
+    assert "autarky" in s and s["autarky"] == 0.0
+
+
+def test_ratio_pct_ok_removed():
+    from src import app as appmod
+    assert not hasattr(appmod, "_ratio_pct_ok")
