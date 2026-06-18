@@ -74,6 +74,24 @@ def last_switch_ages(conn) -> tuple[float | None, float | None]:
             float(off_age) if off_age is not None else None)
 
 
+def recent_household_samples(conn, window_s):
+    """Per-minute relay-OFF household consumption (production_w - surplus_w) over the last
+    window_s seconds, for seeding the base-load estimator on startup. Returns a chronological
+    list of (epoch_seconds, household_w), household >= 0 (impossible negatives from inverter/SHM
+    sampling skew dropped, same rule as the live feed). Read-only."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "WITH wp AS (SELECT time_bucket('1 minute'::interval, time) m, bool_or(relay_on) on_ "
+            "  FROM heatpump WHERE time >= now() - make_interval(secs => %s) GROUP BY m), "
+            "sm AS (SELECT time_bucket('1 minute'::interval, time) m, "
+            "  avg(production_w - surplus_w) hh FROM energy_meter "
+            "  WHERE time >= now() - make_interval(secs => %s) AND production_w IS NOT NULL GROUP BY m) "
+            "SELECT extract(epoch FROM sm.m), sm.hh FROM sm JOIN wp USING (m) "
+            "WHERE NOT wp.on_ AND sm.hh >= 0 ORDER BY sm.m",
+            (window_s, window_s))
+        return [(float(e), float(h)) for e, h in cur.fetchall()]
+
+
 def write_forecast(conn, forecast_date, expected_kwh_day: float,
                    expected_kwh_remaining: float) -> None:
     with conn.cursor() as cur:

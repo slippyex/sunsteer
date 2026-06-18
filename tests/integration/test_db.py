@@ -178,3 +178,32 @@ def test_control_config_has_base_load_percentile():
         cur.execute("SELECT base_load_percentile FROM control_config WHERE id = 1")
         val = cur.fetchone()[0]
     assert val == 50    # migration default
+
+
+def test_recent_household_samples_off_only():
+    _drop_src_modules()
+    sys.path.insert(0, os.path.join(ROOT, "services", "surplus-controller"))
+    from src import dblog  # type: ignore
+    c = _conn()
+    with c.cursor() as cur:
+        cur.execute("DELETE FROM energy_meter; DELETE FROM heatpump;")
+        # 5 recent minutes, relay OFF, production 3000 surplus 2500 -> household 500
+        cur.execute("""INSERT INTO energy_meter (time, production_w, surplus_w)
+                       SELECT now() - (g||' min')::interval, 3000, 2500 FROM generate_series(1,5) g""")
+        cur.execute("""INSERT INTO heatpump (time, relay_on)
+                       SELECT now() - (g||' min')::interval, false FROM generate_series(1,5) g""")
+        # 5 recent minutes, relay ON -> must be excluded
+        cur.execute("""INSERT INTO energy_meter (time, production_w, surplus_w)
+                       SELECT now() - (g||' min')::interval, 3000, 1000 FROM generate_series(6,10) g""")
+        cur.execute("""INSERT INTO heatpump (time, relay_on)
+                       SELECT now() - (g||' min')::interval, true FROM generate_series(6,10) g""")
+        # 1 minute with a negative household (production < surplus, sampling skew) -> dropped
+        cur.execute("""INSERT INTO energy_meter (time, production_w, surplus_w)
+                       VALUES (now() - interval '11 min', 1000, 1500)""")
+        cur.execute("""INSERT INTO heatpump (time, relay_on)
+                       VALUES (now() - interval '11 min', false)""")
+    rows = dblog.recent_household_samples(c, 3600)
+    c.close()
+    assert len(rows) == 5                                  # only the OFF, non-negative minutes
+    assert all(abs(h - 500.0) < 1.0 for _, h in rows)      # household = production - surplus
+    assert rows == sorted(rows)                            # chronological

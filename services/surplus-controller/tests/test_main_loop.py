@@ -1,6 +1,8 @@
 """Orchestration tests for the REAL main() loop (not the pure state machine):
 stale-grace re-arm semantics, fail-safe after grace, external-change reconciliation.
 No production code is modified — dependencies are scripted, time.sleep ends the loop."""
+import time
+
 import pytest
 import src.main as M
 from src.config import DEFAULTS, clamp_config
@@ -334,3 +336,23 @@ def test_baseload_drops_negative_household(monkeypatch):
     states = [dict(fresh(2000, shelly_on=False), production_w=1500)]
     run_loop(monkeypatch, states, relay_seed=False)
     assert fed == []
+
+
+def test_backfill_baseload_warms_estimator(monkeypatch):
+    from src.baseload import BaseLoad
+    monkeypatch.setattr(M, "_baseload", BaseLoad(window_s=3600, min_samples=5, max_stale_s=21600))
+    nowx = time.time()
+    samples = [(nowx - 300 + i * 30, 500.0) for i in range(6)]   # 6 recent OFF samples
+    monkeypatch.setattr(M.dblog, "recent_household_samples", lambda conn, w: samples)
+    M._backfill_baseload(object())
+    assert M._baseload.estimate(time.monotonic(), 50) is not None   # warm immediately
+
+
+def test_backfill_baseload_tolerates_failure(monkeypatch):
+    from src.baseload import BaseLoad
+    monkeypatch.setattr(M, "_baseload", BaseLoad(window_s=3600, min_samples=5, max_stale_s=21600))
+    def boom(conn, w):
+        raise RuntimeError("db down")
+    monkeypatch.setattr(M.dblog, "recent_household_samples", boom)
+    M._backfill_baseload(object())                                  # must not raise
+    assert M._baseload.estimate(time.monotonic(), 50) is None

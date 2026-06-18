@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [0.5.4] - 2026-06-17
+
+### Changed
+- On startup the controller backfills the base-load estimator from the last hour of relay-OFF
+  household samples already in the database, so a restart (every deploy) no longer falls back to
+  the nominal estimate for ~20 min while the estimator re-warms. Tolerant: if the history isn't
+  there it warms up live as before.
+
 ## [0.5.3] - 2026-06-17
 
 ### Changed
@@ -312,7 +320,8 @@ Initial public release.
 - Docker Compose stack, a zero-config demo (`docker-compose.demo.yml`), and multi-arch
   (`amd64` + `arm64`) images on GHCR.
 
-[Unreleased]: https://github.com/slippyex/sunsteer/compare/v0.5.3...HEAD
+[Unreleased]: https://github.com/slippyex/sunsteer/compare/v0.5.4...HEAD
+[0.5.4]: https://github.com/slippyex/sunsteer/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/slippyex/sunsteer/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/slippyex/sunsteer/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/slippyex/sunsteer/compare/v0.5.0...v0.5.1

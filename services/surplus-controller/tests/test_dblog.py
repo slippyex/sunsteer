@@ -83,3 +83,18 @@ def test_write_decision_logs_audit_inputs():
     assert sql.count("%s") == 11        # 7 original + 4 new
     assert params == ("auto", 12.0, 1960.0, 5.0, False, "switched_off",
                       "state_stale_failsafe", 12.0, True, 47.0, True)
+
+
+def test_recent_household_samples_empty():
+    from src import dblog
+
+    class FakeCur:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def execute(self, *a): pass
+        def fetchall(self): return []
+
+    class FakeConn:
+        def cursor(self): return FakeCur()
+
+    assert dblog.recent_household_samples(FakeConn(), 3600) == []

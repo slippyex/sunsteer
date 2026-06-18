@@ -142,6 +142,20 @@ def _num(x):
         return None
 
 
+def _backfill_baseload(conn):
+    """Seed the base-load estimator from the last window of relay-OFF household samples already in
+    the DB, so a restart (every CI/ArgoCD deploy) doesn't drop to the nominal fallback for ~20 min
+    while it re-warms. Each DB wall-clock timestamp is translated into the CURRENT monotonic frame
+    (now_mono - (now_wall - epoch)) so backfilled and live samples share the one monotonic clock
+    the estimator deliberately uses (NTP-step-safe). Tolerant: any failure leaves it to warm live."""
+    try:
+        now_w, now_m = time.time(), time.monotonic()
+        for epoch, hh in dblog.recent_household_samples(conn, _baseload.window_s):
+            _baseload.update(now_m - (now_w - epoch), hh)
+    except Exception:
+        metrics.LOOP_ERRORS.labels("baseload_backfill").inc()
+
+
 def decide_action(cfg, relay_on, state_fresh, fresh_for_decide, surplus, available, eff,
                   on_streak, off_streak, secs_since_on, secs_since_off):
     """Pure core of one control cycle (no I/O). `available` is the PV surplus the decision
@@ -262,6 +276,7 @@ def main():
         age_on = age_off = None
     last_on = now0 - (age_on if age_on is not None else STARTUP_LONG_AGO_S)
     last_off = now0 - (age_off if age_off is not None else STARTUP_LONG_AGO_S)
+    _backfill_baseload(conn)   # warm the base-load estimator from recent DB history
     last_cfg = config.clamp_config(dict(config.DEFAULTS))  # safe (paused) fallback
     status_server.beat(HEARTBEAT_BUDGET_S)  # healthy from startup, before the first cycle
 
