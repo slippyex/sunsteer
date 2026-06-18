@@ -10,9 +10,10 @@ from zoneinfo import ZoneInfo
 
 from prometheus_client import start_http_server
 
-from . import config, dblog, metrics, relays, status_server
+from . import config, dblog, metrics, relays, reporting, status_server
 from .baseload import BaseLoad
 from .forecast import fetch_all, fetch_gti, pv_estimate
+from .state import normalize_state, num
 from .statemachine import decide
 from .sun import sun_elevation, sun_window
 from .threshold import adaptive_threshold, available_and_basis
@@ -130,16 +131,6 @@ _forecast_remaining = None   # kWh, updated by the slow timer
 # available = production - base_load is the real PV headroom; falls back to the nominal-load
 # compensation until warmed up or while the inverter is stale.
 _baseload = BaseLoad(window_s=3600, min_samples=20, max_stale_s=21600)
-
-
-def _num(x):
-    """Coerce a /state numeric field to float, or None if absent/non-numeric. A contract
-    regression (e.g. surplus_w arriving as a string) must degrade to 'blind' -> fail-safe,
-    never crash the cycle on a TypeError deep in the threshold math."""
-    try:
-        return float(x) if x is not None else None
-    except (TypeError, ValueError):
-        return None
 
 
 def _backfill_baseload(conn):
@@ -293,16 +284,9 @@ def main():
             cfg = last_cfg
 
             st = read_state()
-            # Coerce to float (or None): a non-numeric value from a /state contract regression
-            # must read as 'blind' -> fail-safe, not crash the threshold math mid-cycle.
-            surplus_raw = _num(st.get("surplus_w")) if st else None
-            age = _num(st.get("shm_age_s")) if st else None
-            shelly_reachable = st.get("shelly_reachable") if st else None
-            shelly_on = st.get("shelly_on") if st else None
-            # "fresh" = a real, recent SHM reading. Missing JSON, missing surplus, or a
-            # missing/old timestamp all mean "blind" -> decide() fails the WP safe-off.
-            state_fresh = surplus_raw is not None and age is not None and age <= STALE_S
-            surplus = surplus_raw if surplus_raw is not None else 0.0
+            ns = normalize_state(st, STALE_S)
+            surplus_raw, age, shelly_reachable, shelly_on, state_fresh, surplus = (
+                ns.surplus_raw, ns.age, ns.shelly_reachable, ns.shelly_on, ns.state_fresh, ns.surplus)
             # Snapshot the forecast ONCE per cycle: the forecast thread updates the global
             # concurrently, and threshold / decision_log / metrics below must all see the same
             # value or the audit log can disagree with the decision it records.
@@ -347,7 +331,7 @@ def main():
             # MONOTONIC timestamp (an NTP step can't corrupt the rolling window) from the WP-
             # excluded consumption (production - surplus). Fall back to nominal compensation
             # until the estimator is warmed up or while the inverter is stale.
-            production = _num(st.get("production_w")) if st else None
+            production = num(st.get("production_w")) if st else None
             # Feed the estimator ONLY with household (relay-OFF) consumption. Drop physically-
             # impossible negatives (inverter/SHM sampling skew on fast PV ramps) instead of
             # folding them to 0 W, which would bias the baseline down.
@@ -391,33 +375,17 @@ def main():
                 if not relay.set(True, AUTOOFF_S):
                     metrics.SHELLY_ERRORS.inc()
 
-            # Non-safety reporting in its OWN try: a metrics/status failure is telemetry, not a
-            # control fault — it must be categorised separately and can never share a failure
-            # path with the decision/actuation logic above (which has already re-armed the relay).
-            try:
-                wp_est = cfg["wp_nominal_power_w"] if relay_on else 0.0
-                metrics.update(cfg["mode"], relay_on, eff, fc, wp_est,
-                               state_fresh=state_fresh, state_age_s=age, available_w=avail)
-                if sun_elev is not None:
-                    metrics.SUN_ELEVATION.set(sun_elev)
-                if base_load is not None:
-                    metrics.BASE_LOAD.set(base_load)
-                metrics.AVAILABLE_BASIS.set(1 if basis == "production" else 0)
-                rise_ts, set_ts = _todays_sun_window(datetime.now(ZoneInfo(PV_TZ)))
-                metrics.SUN_RISE.set(rise_ts)
-                metrics.SUN_SET.set(set_ts)
-                status_reason = reason
-                if not sun_up and not relay_on and action not in ("switched_on", "switched_off"):
-                    status_reason = "sun_below_horizon"
-                status_server.set_status(
-                    mode=cfg["mode"], relay_on=relay_on, surplus_w=surplus, available_w=avail,
-                    effective_threshold_w=eff, on_streak=on_streak, off_streak=off_streak,
+            reporting.write(
+                reporting.ReportInputs(
+                    mode=cfg["mode"], relay_on=relay_on, eff=eff, fc=fc, sun_elev=sun_elev,
+                    base_load=base_load, basis=basis, avail=avail, surplus=surplus,
+                    state_fresh=state_fresh, age=age, reason=reason, sun_up=sun_up, action=action,
+                    on_streak=on_streak, off_streak=off_streak,
                     on_delay_cycles=cfg["on_delay_cycles"], off_delay_cycles=cfg["off_delay_cycles"],
-                    secs_since_on=int(now - last_on), secs_since_off=int(now - last_off),
                     min_runtime_s=cfg["min_runtime_s"], min_offtime_s=cfg["min_offtime_s"],
-                    loop_seconds=LOOP_S, reason=status_reason, state_fresh=state_fresh, state_age_s=age)
-            except Exception:
-                metrics.LOOP_ERRORS.labels("reporting").inc()
+                    secs_since_on=int(now - last_on), secs_since_off=int(now - last_off),
+                    wp_nominal_power_w=cfg["wp_nominal_power_w"], loop_seconds=LOOP_S),
+                _todays_sun_window, datetime.now(ZoneInfo(PV_TZ)))
         except Exception:
             metrics.LOOP_ERRORS.labels("cycle").inc()
         # Heartbeat AFTER the cycle (incl. handled errors): a true hang inside the try stops
