@@ -24,14 +24,24 @@ def write_meter(conn, agg: dict) -> None:
         cur.execute(
             "INSERT INTO energy_meter (time, import_w, export_w, surplus_w, l1_w, l2_w, l3_w, "
             "import_kwh_total, export_kwh_total, production_w, production_kwh_total, "
-            "dc_power_a_w, dc_power_b_w, inverter_temp_c) "
-            "VALUES (now(),%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+            "inverter_temp_c) "
+            "VALUES (now(),%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
             (agg["import_w"], agg["export_w"], agg["surplus_w"], agg["l1_w"], agg["l2_w"],
              agg["l3_w"], agg["import_kwh_total"], agg["export_kwh_total"],
              agg.get("production_w"), agg.get("production_kwh_total"),
-             agg.get("dc_power_a_w"), agg.get("dc_power_b_w"), agg.get("inverter_temp_c")),
+             agg.get("inverter_temp_c")),
         )
     conn.commit()
+
+
+def write_inverter_strings(conn, strings) -> None:
+    """Insert one inverter_string row per present MPPT (idx, power_w) at now()."""
+    if not strings:
+        return
+    with conn.cursor() as cur:
+        cur.executemany(
+            "INSERT INTO inverter_string (time, idx, power_w) VALUES (now(), %s, %s)",
+            [(s["idx"], s["power"]) for s in strings])
 
 
 def write_heatpump(conn, r: dict) -> None:

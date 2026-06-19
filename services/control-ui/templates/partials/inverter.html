@@ -13,9 +13,11 @@
       {%- if v.ac_power is not none -%}{{ v.ac_power|round(0)|int }}<small> W</small>{%- else -%}&ndash;{%- endif -%}
     </div>
     <div class="lbl">{{ t('ac_power') }}</div>
+    {# Per-MPPT strings, labelled from INVERTER_STRING_LABELS (default "String N"). Any N. #}
     <div class="row2">
-      <span>{{ t('east') }} <b>{{ val(v.dc_power_a, 'W', 0) }}</b></span>
-      <span>{{ t('west') }} <b>{{ val(v.dc_power_b, 'W', 0) }}</b></span>
+      {% for s in v.strings %}
+      <span>{{ s.label }} <b>{{ val(s.power, 'W', 0) }}</b></span>
+      {% endfor %}
     </div>
     <div class="row2">
       <span>{{ t('device_temp') }} <b>{{ val(v.temp, '°C', 1) }}</b></span>

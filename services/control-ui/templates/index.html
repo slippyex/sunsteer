@@ -439,8 +439,14 @@
 
         wpHist.charts.st = new Chart(document.getElementById('wpStringsChart'), {
           type: 'line', data: { datasets: [
-            wpLine({{ t('ch_east')|tojson }}, strings.map(p => ({ x: p.t, y: p.a })), chartTheme.cyan),
-            wpLine({{ t('ch_west')|tojson }}, strings.map(p => ({ x: p.t, y: p.b })), chartTheme.amber) ] },
+            ...(function () {
+              const palette = [chartTheme.cyan, chartTheme.amber, chartTheme.green, chartTheme.red];
+              const labels = {{ string_labels|tojson }};   // {idx: label} from the server
+              const byIdx = {};
+              strings.forEach(p => { (byIdx[p.idx] ||= []).push({ x: p.t, y: p.w }); });
+              return Object.keys(byIdx).sort((a, b) => a - b).map((idx, n) =>
+                wpLine(labels[idx] || ('String ' + idx), byIdx[idx], palette[n % palette.length]));
+            })() ] },
           options: wpBase({ scales: { x: wpTimeX(unit), y: wpY({ beginAtZero: true,
             title: { display: true, text: 'W', font: MONO } }) } }) });
 

@@ -149,10 +149,10 @@ def _flush_once(connect_fn):
             if inv:
                 agg["production_w"] = inv["production_w"]
                 agg["production_kwh_total"] = inv["total_yield_kwh"]
-                agg["dc_power_a_w"] = inv.get("dc_power_a")
-                agg["dc_power_b_w"] = inv.get("dc_power_b")
                 agg["inverter_temp_c"] = inv.get("temp_c")
             tsdb_writer.write_meter(_tsdb_conn, agg)
+            if inv:
+                tsdb_writer.write_inverter_strings(_tsdb_conn, inv.get("strings", []))
         if she:
             tsdb_writer.write_heatpump(_tsdb_conn, she)
     except Exception:

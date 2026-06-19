@@ -1,4 +1,5 @@
 import base64
+import importlib
 
 import pytest
 import src.app as appmod
@@ -156,16 +157,36 @@ def test_heatpump_partial_tolerates_missing_metrics(monkeypatch):
 
 
 def test_inverter_partial_renders(monkeypatch):
-    _patch(monkeypatch)  # prom_query -> 1000.0 for all metrics
+    _patch(monkeypatch)  # prom_query -> 1000.0 for all scalar metrics
+    monkeypatch.setattr(appmod.sources, "prom_strings",
+                        lambda prom: [{"idx": 1, "power": 1500.0, "voltage": 380.0, "current": 3.9},
+                                      {"idx": 2, "power": 700.0, "voltage": 360.0, "current": 1.9}])
+    monkeypatch.setattr(appmod, "STRING_LABELS", {1: "West", 2: "Ost"})
     r = TestClient(appmod.app).get("/partials/inverter?lang=de")
     assert r.status_code == 200
-    assert "Ost" in r.text and "West" in r.text and "Isolation" in r.text
+    assert "West" in r.text and "1500" in r.text and "Isolation" in r.text
 
 def test_inverter_partial_tolerates_missing_metrics(monkeypatch):
     _patch(monkeypatch)
     monkeypatch.setattr(appmod.sources, "prom_query", lambda *a, **k: None)
+    monkeypatch.setattr(appmod.sources, "prom_strings", lambda prom: [])
+    monkeypatch.setattr(appmod, "STRING_LABELS", {})
     r = TestClient(appmod.app).get("/partials/inverter")
-    assert r.status_code == 200  # op_state None -> "–", reachable None -> renders, no 500
+    assert r.status_code == 200  # op_state None -> "–", no strings -> empty loop, no 500
+
+
+def test_inverter_card_renders_n_strings(monkeypatch):
+    _patch(monkeypatch)
+    monkeypatch.setattr(appmod.sources, "prom_query", lambda *a, **k: 3000.0)
+    monkeypatch.setattr(appmod.sources, "prom_strings",
+                        lambda prom: [{"idx": 1, "power": 1500.0, "voltage": 380.0, "current": 3.9},
+                                      {"idx": 2, "power": 700.0, "voltage": 360.0, "current": 1.9}])
+    monkeypatch.setattr(appmod, "STRING_LABELS", {1: "West", 2: "Ost"})
+    c = TestClient(appmod.app)
+    r = c.get("/partials/inverter")
+    assert r.status_code == 200
+    assert "West" in r.text and "Ost" in r.text and "1500" in r.text and "700" in r.text
+    assert "ch_east" not in r.text   # no leftover hardcoded label key
 
 
 def test_ticker_partial_renders(monkeypatch):
@@ -680,3 +701,30 @@ def test_today_summary_includes_autarky():
 def test_ratio_pct_ok_removed():
     from src import app as appmod
     assert not hasattr(appmod, "_ratio_pct_ok")
+
+
+def test_string_label_from_env(monkeypatch):
+    monkeypatch.setenv("INVERTER_STRING_LABELS", "West,Ost")
+    importlib.reload(appmod)
+    try:
+        assert appmod._string_label(1) == "West"
+        assert appmod._string_label(2) == "Ost"
+        assert appmod._string_label(3) == "String 3"      # default when unlabelled
+    finally:
+        monkeypatch.delenv("INVERTER_STRING_LABELS", raising=False)
+        importlib.reload(appmod)
+
+
+def test_prom_strings_groups_by_idx(monkeypatch):
+    from src import sources
+    # prom_query_labels returns {idx: value}; stub the three metric reads
+    monkeypatch.setattr(sources, "prom_query_labels",
+                        lambda prom, metric, label: {"power": {"1": 1500.0, "2": 700.0},
+                                                     "voltage": {"1": 380.0, "2": 360.0},
+                                                     "current": {"1": 3.9, "2": 1.9}}[
+                            {"sma_inverter_dc_power_watts": "power",
+                             "sma_inverter_dc_voltage_volts": "voltage",
+                             "sma_inverter_dc_current_amps": "current"}[metric]])
+    out = sources.prom_strings("http://x")
+    assert out == [{"idx": 1, "power": 1500.0, "voltage": 380.0, "current": 3.9},
+                   {"idx": 2, "power": 700.0, "voltage": 360.0, "current": 1.9}]

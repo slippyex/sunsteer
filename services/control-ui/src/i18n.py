@@ -122,8 +122,6 @@ S = {
 
     # ── inverter card ──────────────────────────────────────────────────────
     "ac_power":        ("AC-Leistung", "AC power"),
-    "east":            ("Ost", "East"),
-    "west":            ("West", "West"),
     "device_temp":     ("Geräte-Temp.", "Device temp."),
     "insulation":      ("Isolation", "Insulation"),
     "insulation_tip":  ("DC-Isolationswiderstand — fällt er Richtung ~200 kΩ, deutet das auf einen DC-Fehler/Feuchte hin.",
@@ -195,8 +193,8 @@ S = {
     "hist_comp":        ("Verdichter (rps · Starts)", "Compressor (rps · starts)"),
     "hist_eff":         ("Effizienz", "Efficiency"),
     "hist_eff_note":    ("· geschätzt, Wärmepumpen-Lag ~1–2 T", "· estimated, heat-pump telemetry lag ~1–2 d"),
-    "hist_strings":     ("WR: Ost vs. West (DC-Leistung)", "Inverter: east vs. west (DC power)"),
-    "hist_strings_note":("· String A / B", "· string A / B"),
+    "hist_strings":     ("WR: DC-Leistung je String", "Inverter: DC power per string"),
+    "hist_strings_note":("· pro MPPT-String", "· per MPPT string"),
 
     # ── chart labels (rendered into JS) ────────────────────────────────────
     "ch_surplus":   ("Überschuss (W)", "Surplus (W)"),
@@ -214,8 +212,6 @@ S = {
     "ch_outside":   ("Außen", "Outside"),
     "ch_rps":       ("Drehzahl (rps)", "Speed (rps)"),
     "ch_kwh_est":   ("kWh (gesch.)", "kWh (est.)"),
-    "ch_east":      ("Ost (A)", "East (A)"),
-    "ch_west":      ("West (B)", "West (B)"),
 
     # ── settings form ──────────────────────────────────────────────────────
     "cycles":             ("Zyklen", "cycles"),

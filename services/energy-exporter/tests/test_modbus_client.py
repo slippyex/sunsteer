@@ -73,8 +73,11 @@ def test_read_inverter_maps_all_fields(monkeypatch):
                         types.SimpleNamespace(ModbusTcpClient=_FakeClient))
     r = mb.read_inverter("1.2.3.4")
     assert r["production_w"] == 5000.0 and r["total_yield_kwh"] == 100.0
-    assert r["dc_power_a"] == 4000.0 and r["dc_voltage_a"] == 400.0 and r["dc_current_a"] == 10.0
-    assert r["dc_power_b"] == 400.0 and r["dc_voltage_b"] == 360.0 and r["dc_current_b"] == 1.0
+    assert r["strings"] == [
+        {"idx": 1, "power": 4000.0, "voltage": 400.0, "current": 10.0},
+        {"idx": 2, "power": 400.0, "voltage": 360.0, "current": 1.0},
+    ]
+    assert "dc_power_a" not in r and "dc_power_b" not in r   # flat keys removed in 0.6.0
     assert r["temp_c"] == 43.3 and r["operating_state"] == 307 and r["riso_ohm"] == 740287
     assert r["ac_v_l1"] == 230.0 and r["grid_freq"] == 50.0
 

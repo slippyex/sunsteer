@@ -5,6 +5,7 @@ import os
 import threading
 import time
 import urllib.request
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
@@ -241,6 +242,132 @@ def _db_connect():
                          os.environ["DB_NAME"], os.environ["DB_USER"], os.environ["DB_PASS"])
 
 
+@dataclass
+class CycleState:
+    """The state that persists across control cycles. main() seeds it; run_cycle mutates it."""
+    conn: object
+    relay_on: bool
+    on_streak: int
+    off_streak: int
+    stale_streak: int
+    last_on: float
+    last_off: float
+    last_cfg: dict
+
+
+def run_cycle(cs, relay):
+    cs.conn = dblog.live_conn(cs.conn, _db_connect)  # reconnect across DB restarts
+    try:
+        cs.last_cfg = config.load_config(cs.conn)  # hot-reload; keep last good on failure
+    except Exception:
+        metrics.LOOP_ERRORS.labels("config").inc()
+    cfg = cs.last_cfg
+
+    st = read_state()
+    ns = normalize_state(st, STALE_S)
+    surplus_raw, age, shelly_reachable, shelly_on, state_fresh, surplus = (
+        ns.surplus_raw, ns.age, ns.shelly_reachable, ns.shelly_on, ns.state_fresh, ns.surplus)
+    # Snapshot the forecast ONCE per cycle: the forecast thread updates the global
+    # concurrently, and threshold / decision_log / metrics below must all see the same
+    # value or the audit log can disagree with the decision it records.
+    fc = _forecast_remaining
+    eff = adaptive_threshold(cfg, fc)
+
+    # Grace before failing safe-off: one blind blip (deploy gap, hiccup) must not cycle
+    # the WP; only fail-safe after STALE_GRACE_CYCLES consecutive blind reads.
+    cs.stale_streak = cs.stale_streak + 1 if not state_fresh else 0
+    fresh_for_decide = state_fresh or cs.stale_streak < STALE_GRACE_CYCLES
+    now = time.monotonic()
+
+    # Reconcile with the ACTUAL relay state. The Shelly can be flipped outside our control
+    # — its auto-off watchdog (SHELLY_AUTOOFF_SECONDS, e.g. while we redeploy) or the
+    # SMA/ennexOS dual-control.
+    # decision_log only records OUR switches, so an external off/on would otherwise be
+    # invisible (the "two EIN in a row" gap). Log it and resync.
+    if state_fresh and shelly_reachable and shelly_on is not None and shelly_on != cs.relay_on:
+        try:
+            dblog.write_decision(cs.conn, cfg["mode"], surplus, eff, fc,
+                                 shelly_on, "switched_on" if shelly_on else "switched_off",
+                                 "external_change", available_w=surplus,
+                                 relay_on_before=cs.relay_on, state_age_s=age,
+                                 shelly_reachable=shelly_reachable)
+        except Exception:
+            metrics.LOOP_ERRORS.labels("decision_log").inc()
+        cs.relay_on = shelly_on
+        cs.last_on, cs.last_off = (now, cs.last_off) if shelly_on else (cs.last_on, now)
+
+    # Pure decision core (load-compensation + hysteresis streaks + decide()).
+    # Read lat/lon from the env at call time (validate_env guarantees they're present)
+    # so the gate works regardless of import ordering. Keep the sun maths OUT of the
+    # control-fault path: if the location can't be read, fail to the SAFE side
+    # (sun_up=False -> no compensation -> the WP is released), never crash the cycle.
+    try:
+        sun_elev = sun_elevation(float(os.environ["PV_LAT"]), float(os.environ["PV_LON"]),
+                                 datetime.now(UTC))
+        sun_up = sun_elev >= SUN_MIN_ELEVATION_DEG
+    except (KeyError, TypeError, ValueError):
+        sun_elev, sun_up = None, False
+    # Real PV headroom: production - base_load. Drive the base-load estimator with a
+    # MONOTONIC timestamp (an NTP step can't corrupt the rolling window) from the WP-
+    # excluded consumption (production - surplus). Fall back to nominal compensation
+    # until the estimator is warmed up or while the inverter is stale.
+    production = num(st.get("production_w")) if st else None
+    # Feed the estimator ONLY with household (relay-OFF) consumption. Drop physically-
+    # impossible negatives (inverter/SHM sampling skew on fast PV ramps) instead of
+    # folding them to 0 W, which would bias the baseline down.
+    if production is not None and surplus_raw is not None and state_fresh and not cs.relay_on:
+        household = production - surplus
+        if household >= 0:
+            _baseload.update(time.monotonic(), household)
+    base_load = _baseload.estimate(time.monotonic(), cfg["base_load_percentile"])
+    available, basis = available_and_basis(
+        surplus, production, base_load, cs.relay_on, sun_up, cfg["wp_nominal_power_w"])
+    avail, cs.on_streak, cs.off_streak, target, action, reason = decide_action(
+        cfg, cs.relay_on, state_fresh, fresh_for_decide, surplus, available, eff,
+        cs.on_streak, cs.off_streak, now - cs.last_on, now - cs.last_off)
+
+    relay_before = cs.relay_on
+    if action in ("switched_on", "switched_off"):
+        ok = relay.set(target, AUTOOFF_S)
+        if ok:
+            cs.relay_on = target
+            if target:
+                cs.last_on = now
+            else:
+                cs.last_off = now
+            metrics.SWITCHES.labels(action).inc()
+        else:
+            metrics.SHELLY_ERRORS.inc()
+            reason = "shelly_write_failed"
+        try:
+            dblog.write_decision(cs.conn, cfg["mode"], surplus, eff, fc,
+                                 target, action if ok else "no_change", reason,
+                                 available_w=avail, relay_on_before=relay_before,
+                                 state_age_s=age, shelly_reachable=shelly_reachable)
+        except Exception:
+            metrics.LOOP_ERRORS.labels("decision_log").inc()
+    elif cs.relay_on:
+        # re-arm the auto-off watchdog every cycle while ON. Reached on a 'surplus_ok'/
+        # 'min_runtime' hold — including up to STALE_GRACE_CYCLES-1 BLIND cycles (the
+        # grace deliberately tolerates one missed read, so one blind re-arm can happen).
+        # After the grace, decide() returns switched_off above and re-arming stops, so a
+        # persistently blind controller can extend the watchdog by at most one cycle.
+        if not relay.set(True, AUTOOFF_S):
+            metrics.SHELLY_ERRORS.inc()
+
+    reporting.write(
+        reporting.ReportInputs(
+            mode=cfg["mode"], relay_on=cs.relay_on, eff=eff, fc=fc, sun_elev=sun_elev,
+            base_load=base_load, basis=basis, avail=avail, surplus=surplus,
+            state_fresh=state_fresh, age=age, reason=reason, sun_up=sun_up, action=action,
+            on_streak=cs.on_streak, off_streak=cs.off_streak,
+            on_delay_cycles=cfg["on_delay_cycles"], off_delay_cycles=cfg["off_delay_cycles"],
+            min_runtime_s=cfg["min_runtime_s"], min_offtime_s=cfg["min_offtime_s"],
+            secs_since_on=int(now - cs.last_on), secs_since_off=int(now - cs.last_off),
+            wp_nominal_power_w=cfg["wp_nominal_power_w"], loop_seconds=LOOP_S),
+        _todays_sun_window, datetime.now(ZoneInfo(PV_TZ)))
+
+
 def main():
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -271,124 +398,17 @@ def main():
     last_cfg = config.clamp_config(dict(config.DEFAULTS))  # safe (paused) fallback
     status_server.beat(HEARTBEAT_BUDGET_S)  # healthy from startup, before the first cycle
 
+    cs = CycleState(conn=conn, relay_on=relay_on, on_streak=on_streak, off_streak=off_streak,
+                    stale_streak=stale_streak, last_on=last_on, last_off=last_off, last_cfg=last_cfg)
     while True:
         # The whole cycle is guarded: a transient DB error (the documented-flaky
         # TimescaleDB) must degrade to "skip cycle + keep re-arming the watchdog",
         # never kill the loop (a dead loop = no watchdog re-arm + no recovery).
         try:
-            conn = dblog.live_conn(conn, _db_connect)  # reconnect across DB restarts
-            try:
-                last_cfg = config.load_config(conn)  # hot-reload; keep last good on failure
-            except Exception:
-                metrics.LOOP_ERRORS.labels("config").inc()
-            cfg = last_cfg
-
-            st = read_state()
-            ns = normalize_state(st, STALE_S)
-            surplus_raw, age, shelly_reachable, shelly_on, state_fresh, surplus = (
-                ns.surplus_raw, ns.age, ns.shelly_reachable, ns.shelly_on, ns.state_fresh, ns.surplus)
-            # Snapshot the forecast ONCE per cycle: the forecast thread updates the global
-            # concurrently, and threshold / decision_log / metrics below must all see the same
-            # value or the audit log can disagree with the decision it records.
-            fc = _forecast_remaining
-            eff = adaptive_threshold(cfg, fc)
-
-            # Grace before failing safe-off: one blind blip (deploy gap, hiccup) must not cycle
-            # the WP; only fail-safe after STALE_GRACE_CYCLES consecutive blind reads.
-            stale_streak = stale_streak + 1 if not state_fresh else 0
-            fresh_for_decide = state_fresh or stale_streak < STALE_GRACE_CYCLES
-            now = time.monotonic()
-
-            # Reconcile with the ACTUAL relay state. The Shelly can be flipped outside our control
-            # — its auto-off watchdog (SHELLY_AUTOOFF_SECONDS, e.g. while we redeploy) or the
-            # SMA/ennexOS dual-control.
-            # decision_log only records OUR switches, so an external off/on would otherwise be
-            # invisible (the "two EIN in a row" gap). Log it and resync.
-            if state_fresh and shelly_reachable and shelly_on is not None and shelly_on != relay_on:
-                try:
-                    dblog.write_decision(conn, cfg["mode"], surplus, eff, fc,
-                                         shelly_on, "switched_on" if shelly_on else "switched_off",
-                                         "external_change", available_w=surplus,
-                                         relay_on_before=relay_on, state_age_s=age,
-                                         shelly_reachable=shelly_reachable)
-                except Exception:
-                    metrics.LOOP_ERRORS.labels("decision_log").inc()
-                relay_on = shelly_on
-                last_on, last_off = (now, last_off) if shelly_on else (last_on, now)
-
-            # Pure decision core (load-compensation + hysteresis streaks + decide()).
-            # Read lat/lon from the env at call time (validate_env guarantees they're present)
-            # so the gate works regardless of import ordering. Keep the sun maths OUT of the
-            # control-fault path: if the location can't be read, fail to the SAFE side
-            # (sun_up=False -> no compensation -> the WP is released), never crash the cycle.
-            try:
-                sun_elev = sun_elevation(float(os.environ["PV_LAT"]), float(os.environ["PV_LON"]),
-                                         datetime.now(UTC))
-                sun_up = sun_elev >= SUN_MIN_ELEVATION_DEG
-            except (KeyError, TypeError, ValueError):
-                sun_elev, sun_up = None, False
-            # Real PV headroom: production - base_load. Drive the base-load estimator with a
-            # MONOTONIC timestamp (an NTP step can't corrupt the rolling window) from the WP-
-            # excluded consumption (production - surplus). Fall back to nominal compensation
-            # until the estimator is warmed up or while the inverter is stale.
-            production = num(st.get("production_w")) if st else None
-            # Feed the estimator ONLY with household (relay-OFF) consumption. Drop physically-
-            # impossible negatives (inverter/SHM sampling skew on fast PV ramps) instead of
-            # folding them to 0 W, which would bias the baseline down.
-            if production is not None and surplus_raw is not None and state_fresh and not relay_on:
-                household = production - surplus
-                if household >= 0:
-                    _baseload.update(time.monotonic(), household)
-            base_load = _baseload.estimate(time.monotonic(), cfg["base_load_percentile"])
-            available, basis = available_and_basis(
-                surplus, production, base_load, relay_on, sun_up, cfg["wp_nominal_power_w"])
-            avail, on_streak, off_streak, target, action, reason = decide_action(
-                cfg, relay_on, state_fresh, fresh_for_decide, surplus, available, eff,
-                on_streak, off_streak, now - last_on, now - last_off)
-
-            relay_before = relay_on
-            if action in ("switched_on", "switched_off"):
-                ok = relay.set(target, AUTOOFF_S)
-                if ok:
-                    relay_on = target
-                    if target:
-                        last_on = now
-                    else:
-                        last_off = now
-                    metrics.SWITCHES.labels(action).inc()
-                else:
-                    metrics.SHELLY_ERRORS.inc()
-                    reason = "shelly_write_failed"
-                try:
-                    dblog.write_decision(conn, cfg["mode"], surplus, eff, fc,
-                                         target, action if ok else "no_change", reason,
-                                         available_w=avail, relay_on_before=relay_before,
-                                         state_age_s=age, shelly_reachable=shelly_reachable)
-                except Exception:
-                    metrics.LOOP_ERRORS.labels("decision_log").inc()
-            elif relay_on:
-                # re-arm the auto-off watchdog every cycle while ON. Reached on a 'surplus_ok'/
-                # 'min_runtime' hold — including up to STALE_GRACE_CYCLES-1 BLIND cycles (the
-                # grace deliberately tolerates one missed read, so one blind re-arm can happen).
-                # After the grace, decide() returns switched_off above and re-arming stops, so a
-                # persistently blind controller can extend the watchdog by at most one cycle.
-                if not relay.set(True, AUTOOFF_S):
-                    metrics.SHELLY_ERRORS.inc()
-
-            reporting.write(
-                reporting.ReportInputs(
-                    mode=cfg["mode"], relay_on=relay_on, eff=eff, fc=fc, sun_elev=sun_elev,
-                    base_load=base_load, basis=basis, avail=avail, surplus=surplus,
-                    state_fresh=state_fresh, age=age, reason=reason, sun_up=sun_up, action=action,
-                    on_streak=on_streak, off_streak=off_streak,
-                    on_delay_cycles=cfg["on_delay_cycles"], off_delay_cycles=cfg["off_delay_cycles"],
-                    min_runtime_s=cfg["min_runtime_s"], min_offtime_s=cfg["min_offtime_s"],
-                    secs_since_on=int(now - last_on), secs_since_off=int(now - last_off),
-                    wp_nominal_power_w=cfg["wp_nominal_power_w"], loop_seconds=LOOP_S),
-                _todays_sun_window, datetime.now(ZoneInfo(PV_TZ)))
+            run_cycle(cs, relay)
         except Exception:
             metrics.LOOP_ERRORS.labels("cycle").inc()
-        # Heartbeat AFTER the cycle (incl. handled errors): a true hang inside the try stops
+        # Heartbeat AFTER the cycle (incl. handled errors): a true hang inside run_cycle stops
         # this beat -> /healthz goes 503 -> liveness restarts the loop. Threshold = a few loops.
         status_server.beat(HEARTBEAT_BUDGET_S)
         time.sleep(LOOP_S)

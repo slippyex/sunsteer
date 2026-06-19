@@ -6,9 +6,12 @@ _log = logging.getLogger(__name__)
 # SMA Modbus holding registers (SMA device profile, Sunny Tripower X — verified live 2026-06)
 REG_AC_POWER = 30775      # S32, W  — current AC active power = production
 REG_TOTAL_YIELD = 30513   # U64, Wh — lifetime yield (today's yield is derived in SQL from this)
-# Per-MPPT DC (string A / B): power S32 (W), voltage U32 (×0.01 V), current U32 (×0.001 A)
-REG_DC_P_A, REG_DC_V_A, REG_DC_I_A = 30773, 30771, 30769
-REG_DC_P_B, REG_DC_V_B, REG_DC_I_B = 30961, 30959, 30957
+# Per-MPPT DC registers (power S32 W, voltage U32 ×0.01 V, current U32 ×0.001 A), 1-based idx.
+# Add a tuple here to read another MPPT once its registers are confirmed for the model.
+_MPPTS = [
+    (1, 30773, 30771, 30769),   # MPPT 1
+    (2, 30961, 30959, 30957),   # MPPT 2
+]
 REG_TEMP = 30953          # S32, ×0.1 °C  — device/heatsink temperature
 REG_OP_STATE = 30201      # U32 enum      — operating state (307 = Ok)
 REG_RISO = 30225          # U32, ohm      — DC insulation resistance
@@ -42,6 +45,11 @@ def parse_u64(regs):
     return None if raw == _U64_NAN else raw
 
 
+def build_strings(readings):
+    """Keep only MPPTs whose power register read a real value (NaN/None -> array drops it)."""
+    return [r for r in readings if r["power"] is not None]
+
+
 def read_inverter(host, port=502, unit_id=3, timeout=5.0):
     """Read the inverter (READ-ONLY). production_w + total_yield_kwh gate reachability (None ->
     unreachable); the richer per-string/health fields are read tolerantly (a NaN/failed register
@@ -72,18 +80,17 @@ def read_inverter(host, port=502, unit_id=3, timeout=5.0):
         if p is None or ty is None:               # core registers unreadable -> unreachable
             return None
         power, total = parse_s32(p), parse_u64(ty)
-        dc_a, dc_b = s32(REG_DC_P_A), s32(REG_DC_P_B)
+        readings = [
+            {"idx": i, "power": float(pw) if (pw := s32(rp)) is not None else None,
+             "voltage": scaled(u32(rv), 0.01), "current": scaled(u32(ri), 0.001)}
+            for i, rp, rv, ri in _MPPTS
+        ]
         return {
             "production_w": float(power) if power is not None else 0.0,
             # NaN lifetime counter -> None (NULL in TSDB), never 0.0: a 0 in the monotonic
             # production_kwh_total reads as a counter reset and corrupts delta/increase queries.
             "total_yield_kwh": (total / 1000.0) if total is not None else None,
-            "dc_power_a": float(dc_a) if dc_a is not None else None,
-            "dc_voltage_a": scaled(u32(REG_DC_V_A), 0.01),
-            "dc_current_a": scaled(u32(REG_DC_I_A), 0.001),
-            "dc_power_b": float(dc_b) if dc_b is not None else None,
-            "dc_voltage_b": scaled(u32(REG_DC_V_B), 0.01),
-            "dc_current_b": scaled(u32(REG_DC_I_B), 0.001),
+            "strings": build_strings(readings),
             "temp_c": scaled(s32(REG_TEMP), 0.1),
             "operating_state": u32(REG_OP_STATE),
             "riso_ohm": u32(REG_RISO),

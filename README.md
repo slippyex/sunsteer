@@ -77,7 +77,8 @@ account is needed. Tear down with `docker compose -f docker-compose.demo.yml dow
 - **Runtime tuning in the UI** — thresholds, delays, runtimes and prices live in the
   database and hot-reload every control cycle. Static hardware config stays in `.env`.
 - **Observable** — Prometheus metrics from every service, optional Grafana add-on,
-  English alert rules included.
+  English alert rules included. The inverter card and history chart adapt to **any number of MPPT
+  strings**, named via `INVERTER_STRING_LABELS` (e.g. `Ost,West` or `Süd`; default "String N").
 
 ## Run it for real
 

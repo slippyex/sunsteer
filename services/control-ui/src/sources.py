@@ -79,6 +79,38 @@ def prom_query(base_url, expr, timeout=5.0):
         return None
 
 
+def prom_query_labels(base_url, metric, label, timeout=4.0):
+    """All series of `metric` as {label_value: float}. Tolerant -> {} on any error."""
+    url = f"{base_url.rstrip('/')}/api/v1/query?" + urllib.parse.urlencode({"query": metric})
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as r:
+            data = json.load(r)
+        out = {}
+        for s in data.get("data", {}).get("result", []):
+            lv = s.get("metric", {}).get(label)
+            if lv is None:
+                continue
+            try:
+                v = float(s["value"][1])
+            except (KeyError, IndexError, ValueError, TypeError):
+                continue
+            if math.isfinite(v):
+                out[lv] = v
+        return out
+    except Exception as e:
+        log.warning("prom_query_labels(%s): %s", metric, e)
+        return {}
+
+
+def prom_strings(prom):
+    """Per-MPPT-string live values for the inverter card, sorted by idx."""
+    p = prom_query_labels(prom, "sma_inverter_dc_power_watts", "string")
+    v = prom_query_labels(prom, "sma_inverter_dc_voltage_volts", "string")
+    c = prom_query_labels(prom, "sma_inverter_dc_current_amps", "string")
+    return [{"idx": int(k), "power": p[k], "voltage": v.get(k), "current": c.get(k)}
+            for k in sorted(p, key=int)]
+
+
 def prom_query_range(base_url, expr, start, end, step, timeout=8.0):
     """Range query -> list of [unix_ts, float]. Empty list on failure."""
     q = urllib.parse.urlencode({"query": expr, "start": start, "end": end, "step": step})
@@ -426,14 +458,15 @@ def wp_timeline_today(conn, start_epoch):
 
 
 def _wp_strings(conn, interval, bucket):
-    """Inverter per-MPPT DC power (string A/B = the two array orientations), bucket-averaged."""
+    """Per-MPPT-string DC power history, bucket-averaged, as [{"t","idx","w"}] (any N strings)."""
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT time_bucket(%s::interval, time) AS t, round(avg(dc_power_a_w)::numeric,0), "
-                "round(avg(dc_power_b_w)::numeric,0) FROM energy_meter WHERE time > now() - %s::interval "
-                "GROUP BY t ORDER BY t", (bucket, interval))
-            return [{"t": t.isoformat(), "a": _num(a), "b": _num(b)} for t, a, b in cur.fetchall()]
+                "SELECT time_bucket(%s::interval, time) t, idx, round(avg(power_w)::numeric,0) w "
+                "FROM inverter_string WHERE time > now() - %s::interval "
+                "GROUP BY t, idx ORDER BY t, idx", (bucket, interval))
+            return [{"t": t.isoformat(), "idx": int(i), "w": float(w)}
+                    for t, i, w in cur.fetchall()]
     except Exception as e:
         log.warning("_wp_strings: %s", e)
         return []

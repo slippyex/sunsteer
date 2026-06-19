@@ -207,3 +207,42 @@ def test_recent_household_samples_off_only():
     assert len(rows) == 5                                  # only the OFF, non-negative minutes
     assert all(abs(h - 500.0) < 1.0 for _, h in rows)      # household = production - surplus
     assert rows == sorted(rows)                            # chronological
+
+
+def test_inverter_string_table_and_backfill():
+    c = _conn()
+    with c.cursor() as cur:
+        cur.execute("SELECT to_regclass('public.inverter_string')")
+        assert cur.fetchone()[0] is not None          # table created by migration 005
+        # backfill is guarded to run only when empty; insert legacy rows, re-run the backfill body
+        cur.execute("DELETE FROM inverter_string; DELETE FROM energy_meter;")
+        cur.execute("INSERT INTO energy_meter (time, dc_power_a_w, dc_power_b_w) "
+                    "VALUES (now() - interval '1 min', 1500, 700)")
+        cur.execute(
+            "INSERT INTO inverter_string (time, idx, power_w) "
+            "SELECT time, 1, dc_power_a_w FROM energy_meter WHERE dc_power_a_w IS NOT NULL "
+            "  AND NOT EXISTS (SELECT 1 FROM inverter_string)")
+        cur.execute(
+            "INSERT INTO inverter_string (time, idx, power_w) "
+            "SELECT time, 2, dc_power_b_w FROM energy_meter WHERE dc_power_b_w IS NOT NULL "
+            "  AND NOT EXISTS (SELECT 1 FROM inverter_string WHERE idx = 2)")
+        cur.execute("SELECT idx, power_w FROM inverter_string ORDER BY idx")
+        rows = cur.fetchall()
+    c.close()
+    assert rows == [(1, 1500.0), (2, 700.0)]
+
+
+def test_write_inverter_strings_writes_rows():
+    _drop_src_modules()
+    sys.path.insert(0, os.path.join(ROOT, "services", "energy-exporter"))
+    from src import tsdb_writer  # type: ignore
+    c = _conn()
+    with c.cursor() as cur:
+        cur.execute("DELETE FROM inverter_string")
+    tsdb_writer.write_inverter_strings(c, [{"idx": 1, "power": 1500.0},
+                                           {"idx": 2, "power": 700.0}])
+    with c.cursor() as cur:
+        cur.execute("SELECT idx, power_w FROM inverter_string ORDER BY idx")
+        rows = cur.fetchall()
+    c.close()
+    assert rows == [(1, 1500.0), (2, 700.0)]

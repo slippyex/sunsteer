@@ -36,6 +36,16 @@ VERSION = os.environ.get("SUNSTEER_VERSION", "dev")  # deploy-time tag, shown in
 WEATHER_LOCATION = os.environ.get("WEATHER_LOCATION", "")  # empty -> weather panel shows just "Weather"
 HEATPUMP_LABEL = os.environ.get("HEATPUMP_LABEL", "").strip()  # empty -> vendor tag hidden in heat-pump card
 
+# Per-MPPT-string display labels, idx (1-based) -> label, from a deploy-time comma list
+# (e.g. "Ost,West" or "Süd"). Unlabelled strings fall back to "String N".
+STRING_LABELS = {i + 1: lbl.strip() for i, lbl in
+                 enumerate(os.environ.get("INVERTER_STRING_LABELS", "").split(","))
+                 if lbl.strip()}
+
+
+def _string_label(idx):
+    return STRING_LABELS.get(idx, f"String {idx}")
+
 # Open-Meteo weather widget — reuse the PV array location
 WLAT = os.environ.get("PV_LAT")                    # required — validated below
 WLON = os.environ.get("PV_LON")                    # required — validated below
@@ -202,15 +212,10 @@ _HEATPUMP = {
     "energy_read_at": "heatpump_energy_read_at_timestamp_seconds",
 }
 
-# Inverter (SMA Tripower X via Modbus). string a/b = the two MPPT inputs (the East/West arrays).
+# Inverter (SMA Tripower X via Modbus). Per-MPPT-string live values come from sources.prom_strings
+# (any N strings, labelled via INVERTER_STRING_LABELS); only the scalar gauges live here.
 _INVERTER = {
     "ac_power": "sma_inverter_ac_power_watts", "reachable": "sma_inverter_reachable",
-    "dc_power_a": 'sma_inverter_dc_power_watts{string="a"}',
-    "dc_power_b": 'sma_inverter_dc_power_watts{string="b"}',
-    "dc_v_a": 'sma_inverter_dc_voltage_volts{string="a"}',
-    "dc_v_b": 'sma_inverter_dc_voltage_volts{string="b"}',
-    "dc_i_a": 'sma_inverter_dc_current_amps{string="a"}',
-    "dc_i_b": 'sma_inverter_dc_current_amps{string="b"}',
     "temp": "sma_inverter_temperature_celsius", "op_state": "sma_inverter_operating_state",
     "riso": "sma_inverter_insulation_resistance_ohms",
     "ac_v_l1": 'sma_inverter_ac_voltage_volts{phase="l1"}',
@@ -294,7 +299,8 @@ def index(request: Request):
         cfg = sources.load_config(conn)
         decisions = sources.recent_decisions(conn)
     return render(request, "index.html", live=_live(), cfg=cfg,
-                  decisions=decisions, grafana=GRAFANA, weather_location=WEATHER_LOCATION)
+                  decisions=decisions, grafana=GRAFANA, weather_location=WEATHER_LOCATION,
+                  string_labels={str(k): v for k, v in STRING_LABELS.items()})
 
 
 @app.get("/partials/status", response_class=HTMLResponse)
@@ -453,6 +459,7 @@ def inverter(request: Request):
     v["state_text"], v["state_ok"] = txt, ok
     riso = v.get("riso")
     v["riso_kohm"] = round(riso / 1000.0) if riso is not None else None
+    v["strings"] = [{**s, "label": _string_label(s["idx"])} for s in sources.prom_strings(PROM)]
     return render(request, "partials/inverter.html", v=v)
 
 

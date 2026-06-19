@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [0.6.0] - 2026-06-19
+
+### Changed
+- **Inverter per-string handling is now generic** — any number of MPPT strings instead of a
+  hardcoded two. Per-string DC power lives in a new `inverter_string` table, is exposed as
+  `sma_inverter_dc_*{string="<idx>"}`, and is labelled at deploy time via `INVERTER_STRING_LABELS`
+  (comma-separated, default "String N"). The web UI renders N strings dynamically; the fixed
+  Ost/West labelling is gone from the code. Migration `db/migrations/005-inverter-string.sql`
+  backfills history from the old `dc_power_a_w`/`dc_power_b_w` columns (kept, frozen).
+
 ## [0.5.4] - 2026-06-17
 
 ### Changed
@@ -320,7 +330,8 @@ Initial public release.
 - Docker Compose stack, a zero-config demo (`docker-compose.demo.yml`), and multi-arch
   (`amd64` + `arm64`) images on GHCR.
 
-[Unreleased]: https://github.com/slippyex/sunsteer/compare/v0.5.4...HEAD
+[Unreleased]: https://github.com/slippyex/sunsteer/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/slippyex/sunsteer/compare/v0.5.4...v0.6.0
 [0.5.4]: https://github.com/slippyex/sunsteer/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/slippyex/sunsteer/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/slippyex/sunsteer/compare/v0.5.1...v0.5.2

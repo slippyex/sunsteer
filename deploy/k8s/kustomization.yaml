@@ -25,18 +25,18 @@ resources:
   # secret.yaml is gitignored — never commit real credentials.
   - secret.yaml
 
-# The Deployment manifests already pin :0.5.4 (so a raw `kubectl apply -f` is reproducible
+# The Deployment manifests already pin :0.6.0 (so a raw `kubectl apply -f` is reproducible
 # too); this block is the single knob to retag via kustomize. Keep both in sync and bump
 # on every upgrade — :latest must never deploy control logic.
 images:
   - name: ghcr.io/slippyex/sunsteer/energy-exporter
-    newTag: "0.5.4"
+    newTag: "0.6.0"
   - name: ghcr.io/slippyex/sunsteer/surplus-controller
-    newTag: "0.5.4"
+    newTag: "0.6.0"
   - name: ghcr.io/slippyex/sunsteer/control-ui
-    newTag: "0.5.4"
+    newTag: "0.6.0"
   - name: ghcr.io/slippyex/sunsteer/heatpump-exporter
-    newTag: "0.5.4"
+    newTag: "0.6.0"
 
 # NOTE: the db-migrate Job mounts a `sunsteer-migrations` ConfigMap built from
 # db/migrations/*.sql. It is created manually before `apply -k` (see README step 3),
