@@ -3,6 +3,8 @@
 # themselves immutable and digest-addressable in GHCR, so downstream pins by
 # digest. Pin here too if you need byte-for-byte reproducible local builds.
 FROM python:3.12-slim AS base
+# Pull Debian security updates (e.g. zlib1g deb13u1 for CVE-2026-85091) the slim tag lags on.
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
