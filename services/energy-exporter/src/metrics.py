@@ -33,7 +33,25 @@ INV_RISO = Gauge("sma_inverter_insulation_resistance_ohms", "DC insulation resis
 INV_AC_VOLTAGE = Gauge("sma_inverter_ac_voltage_volts", "AC voltage per phase (V)", ["phase"])
 INV_GRID_FREQ = Gauge("sma_inverter_grid_frequency_hertz", "Grid frequency (Hz)")
 
+# Heat-pump power meter (Shelly Pro 3EM CT clamp on the WP supply — real measured power,
+# unlike the SG-Ready Shelly 1PM which is a signal contact and always reads 0 W)
+HP_POWER = Gauge("heatpump_power_watts", "Heat-pump real power via Shelly 3EM (W)")
+HP_POWER_PHASE = Gauge("heatpump_power_phase_watts", "Heat-pump per-phase power (W)", ["phase"])
+HP_METER_REACHABLE = Gauge("heatpump_meter_reachable", "1 if last WP-meter poll succeeded")
+
 POLL_ERRORS = Counter("energy_exporter_poll_errors_total", "Failed reads", ["source"])
+
+
+def update_hp_meter(r) -> None:
+    if r is None:
+        HP_METER_REACHABLE.set(0)
+        POLL_ERRORS.labels("wp_meter").inc()
+        return
+    HP_METER_REACHABLE.set(1)
+    HP_POWER.set(r["power_w"])
+    HP_POWER_PHASE.labels("L1").set(r["l1_w"])
+    HP_POWER_PHASE.labels("L2").set(r["l2_w"])
+    HP_POWER_PHASE.labels("L3").set(r["l3_w"])
 
 
 def update_shm(r: dict) -> None:

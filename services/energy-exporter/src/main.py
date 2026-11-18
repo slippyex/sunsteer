@@ -33,8 +33,10 @@ STATE_PORT = _pos_int("STATE_PORT", 9121, hi=65535)
 # Interface /state binds to. Default "" = all interfaces (the in-cluster controller reaches
 # it via the node IP under hostNetwork). Set to a specific IP to restrict exposure.
 STATE_BIND = os.environ.get("STATE_BIND", "")
+WP_METER_URL = os.environ.get("WP_METER_URL")  # optional: Shelly Pro 3EM CT clamp on the WP supply
 SHELLY_POLL_S = _pos_int("SHELLY_POLL_SECONDS", 10)
 INVERTER_POLL_S = _pos_int("INVERTER_POLL_SECONDS", 10)
+WP_METER_POLL_S = _pos_int("WP_METER_POLL_SECONDS", 10)
 FLUSH_S = _pos_int("TSDB_FLUSH_SECONDS", 60)
 
 REQUIRED_ENV_BASE = ("DB_HOST", "DB_NAME", "DB_USER", "DB_PASS")
@@ -66,6 +68,7 @@ _buf = []
 _buf_lock = threading.Lock()
 _last_shelly = None
 _last_inverter = None
+_last_wp_meter = None
 
 
 def run_guarded(name, cycle_fn, sleep_s):
@@ -129,6 +132,12 @@ def _inverter_cycle():
         log.debug("inverter modbus read returned no data (unreachable)")
 
 
+def _wp_meter_cycle(reader):
+    global _last_wp_meter
+    _last_wp_meter = reader.get_power()
+    metrics.update_hp_meter(_last_wp_meter)
+
+
 _tsdb_conn = None
 
 
@@ -184,6 +193,10 @@ def main():
         threading.Thread(target=run_guarded, args=("shelly", lambda: _shelly_cycle(_relay), SHELLY_POLL_S), daemon=True).start()
     if INVERTER_HOST:
         threading.Thread(target=run_guarded, args=("inverter", _inverter_cycle, INVERTER_POLL_S), daemon=True).start()
+    if WP_METER_URL:
+        from .drivers.shelly import ShellyEMReader
+        _wp_meter = ShellyEMReader(WP_METER_URL)
+        threading.Thread(target=run_guarded, args=("wp_meter", lambda: _wp_meter_cycle(_wp_meter), WP_METER_POLL_S), daemon=True).start()
     threading.Thread(target=tsdb_flusher, args=(db_connect,), daemon=True).start()
     while True:
         time.sleep(3600)

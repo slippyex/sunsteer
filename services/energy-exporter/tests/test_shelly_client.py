@@ -1,4 +1,4 @@
-from src.drivers.shelly import parse_switch_status
+from src.drivers.shelly import parse_em_status, parse_switch_status
 
 SAMPLE = {
     "id": 0, "output": True, "apower": 1234.5, "voltage": 230.1,
@@ -20,3 +20,25 @@ def test_parse_handles_missing_optionals():
     assert r["energy_wh_total"] == 1.0
     assert r["voltage"] is None
     assert r["temperature_c"] is None
+
+
+# Shelly Pro 3EM EM.GetStatus (triphase) — real WP power meter
+EM_SAMPLE = {
+    "id": 0,
+    "a_act_power": 118.7, "b_act_power": 1.6, "c_act_power": 1611.1,
+    "total_act_power": 1731.4,
+}
+
+def test_parse_em_status():
+    r = parse_em_status(EM_SAMPLE)
+    assert r["power_w"] == 1731.4
+    assert r["l1_w"] == 118.7
+    assert r["l2_w"] == 1.6
+    assert r["l3_w"] == 1611.1
+
+def test_parse_em_status_handles_missing():
+    r = parse_em_status({})
+    assert r["power_w"] == 0.0
+    assert r["l1_w"] == 0.0
+    assert r["l2_w"] == 0.0
+    assert r["l3_w"] == 0.0
